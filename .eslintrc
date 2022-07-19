@@ -1,0 +1,14 @@
+{
+    "root": true,
+    "parser": "@typescript-eslint/parser",
+    "plugins": ["@typescript-eslint"],
+    "parserOptions": {
+        "project": ["./tsconfig.json", "./server/tsconfig.json"]
+    },
+    "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+    "env": {
+        "browser": false,
+        "es6": true,
+        "node": true
+    }
+}
