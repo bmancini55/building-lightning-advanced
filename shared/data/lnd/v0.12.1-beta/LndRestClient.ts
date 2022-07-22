@@ -132,6 +132,52 @@ export class LndRestClient implements ILndClient {
     }
 
     /**
+     * AddHoldInvoice creates a hold invoice. It ties the invoice to the hash supplied in the
+     * request.
+     * Reference: https://api.lightning.community/#v2-invoices-hodl
+     * @param options
+     */
+    public addHoldInvoice(options: Lnd.AddHoldInvoiceInput): Promise<Lnd.AddHoldInvoiceResult> {
+        const args = {
+            hash: options.hash.toString("base64"),
+            memo: options.memo,
+            value: options.value,
+            value_msat: options.value_msat,
+            description_hash: options.description_hash?.toString("base64"),
+            expiry: options.expiry,
+            cltv_expiry: options.cltv_expiry,
+            fallback_addr: options.fallback_addr,
+        };
+        return this.post("/v2/invoices/hodl", args);
+    }
+
+    /**
+     * CancelInvoice cancels a currently open invoice. If the invoice is already canceled, this call
+     * will succeed. If the invoice is already settled, it will fail.
+     * Reference: https://api.lightning.community/#v2-invoices-cancel
+     * @param hash
+     */
+    public cancelInvoice(hash: Buffer): Promise<void> {
+        const args = {
+            payment_hash: hash.toString("base64"),
+        };
+        return this.post("/v2/invoices/cancel", args);
+    }
+
+    /**
+     * SettleInvoice settles an accepted invoice. If the invoice is already settled, this call will
+     * succeed.
+     * Reference: https://api.lightning.community/#v2-invoices-settle
+     * @param preimage
+     */
+    public settleInvoice(preimage: Buffer): Promise<void> {
+        const args = {
+            preimage: preimage.toString("base64"),
+        };
+        return this.post("/v2/invoices/settle", args);
+    }
+
+    /**
      * Helper function for making HTTP GET requests to the LND node's
      * REST API. This method includes the the macaroon provided at
      * instance construction and connects using the node's TLS certificate.
@@ -158,6 +204,40 @@ export class LndRestClient implements ILndClient {
                 });
             });
             req.on("error", reject);
+            req.end();
+        });
+    }
+
+    /**
+     * Helper function for making HTTP POST requests to the LND node's
+     * REST API. This method includes the the macaroon provided at
+     * instance construction and connects using the node's TLS certificate.
+     * @param path
+     * @returns
+     */
+    public async post<T>(path: string, json: any): Promise<T> {
+        return new Promise((resolve, reject) => {
+            const url = `${this.host}${path}`;
+            const options = {
+                method: "POST",
+                headers: {
+                    "grpc-metadata-macaroon": this.macaroon.toString("hex"),
+                    "content-type": "application/json",
+                },
+                ca: this.cert,
+            };
+            const req = https.request(url, options, res => {
+                const bufs: Buffer[] = [];
+                res.on("data", buf => {
+                    bufs.push(buf);
+                });
+                res.on("end", () => {
+                    const result = Buffer.concat(bufs);
+                    resolve(JSON.parse(result.toString("utf-8")));
+                });
+            });
+            req.on("error", reject);
+            req.write(JSON.stringify(json));
             req.end();
         });
     }

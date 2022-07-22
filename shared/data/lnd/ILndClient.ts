@@ -13,4 +13,8 @@ export interface ILndClient {
 
     getGraph(): Promise<Lnd.Graph>;
     subscribeGraph(cb: (update: Lnd.GraphUpdate) => void): Promise<void>;
+
+    addHoldInvoice(options: Lnd.AddHoldInvoiceInput): Promise<Lnd.AddHoldInvoiceResult>;
+    cancelInvoice(hash: Buffer): Promise<void>;
+    settleInvoice(preimage: Buffer): Promise<void>;
 }
