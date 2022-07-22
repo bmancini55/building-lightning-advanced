@@ -140,6 +140,24 @@ export namespace Lnd {
         payment_addr: Buffer;
     }
 
+    export interface AddHoldInvoiceInput {
+        memo?: string;
+        hash: Buffer;
+        value?: int64;
+        value_msat?: int64;
+        description_hash?: Buffer;
+        expiry?: int64;
+        fallback_addr?: string;
+        cltv_expiry?: int64;
+        private?: boolean;
+    }
+
+    export interface AddHoldInvoiceResult {
+        payment_request: string;
+        add_index: uint64;
+        payment_addr: Buffer;
+    }
+
     export interface Invoice {
         memo: string;
         r_preimage: Buffer;

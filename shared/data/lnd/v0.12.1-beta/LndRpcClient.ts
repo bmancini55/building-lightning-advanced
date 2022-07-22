@@ -16,6 +16,7 @@ process.env.GRPC_SSL_CIPHER_SUITES = "HIGH+ECDSA";
  */
 export class LndRpcClient implements ILndClient {
     protected lightning: any;
+    protected invoices: any;
 
     constructor(host: string, macaroon: Buffer, cert: Buffer) {
         const loaderOptions = {
@@ -25,10 +26,13 @@ export class LndRpcClient implements ILndClient {
             defaults: true,
             oneofs: true,
         };
-        const protoPath = path.join(__dirname, "rpc.proto");
-        const packageDefinition = protoLoader.loadSync(protoPath, loaderOptions);
-        const lnrpcDescriptor = grpc.loadPackageDefinition(packageDefinition);
-        const lnrpc: any = lnrpcDescriptor.lnrpc;
+        const lightningPath = path.join(__dirname, "lightning.proto");
+        const invoicesPath = path.join(__dirname, "invoices.proto");
+        const packageDefinition = protoLoader.loadSync(
+            [lightningPath, invoicesPath],
+            loaderOptions,
+        );
+        const definition: any = grpc.loadPackageDefinition(packageDefinition);
 
         const metadata = new grpc.Metadata();
         metadata.add("macaroon", macaroon.toString("hex"));
@@ -38,7 +42,8 @@ export class LndRpcClient implements ILndClient {
         const sslCreds = grpc.credentials.createSsl(cert);
         const credentials = grpc.credentials.combineChannelCredentials(sslCreds, macaroonCreds);
 
-        this.lightning = new lnrpc.Lightning(host, credentials);
+        this.lightning = new definition.lnrpc.Lightning(host, credentials);
+        this.invoices = new definition.invoicesrpc.Invoices(host, credentials);
     }
 
     /**
@@ -173,5 +178,53 @@ export class LndRpcClient implements ILndClient {
      */
     public subscribeGraph(cb: (update: Lnd.GraphUpdate) => void): Promise<void> {
         throw new Error("Not implemented");
+    }
+
+    /**
+     * AddHoldInvoice creates a hold invoice. It ties the invoice to the hash supplied in the request.
+     * Reference: https://api.lightning.community/#addholdinvoice
+     * @param options
+     * @returns
+     */
+    public addHoldInvoice(options: Lnd.AddHoldInvoiceInput): Promise<Lnd.AddHoldInvoiceResult> {
+        const invoice = {
+            hash: options.hash,
+            memo: options.memo,
+            value: options.value,
+            value_msat: options.value_msat,
+            description_hash: options.description_hash,
+            export: options.expiry,
+            fallback_addr: options.fallback_addr,
+            private: options.private,
+        };
+        return promisify(this.invoices.addHoldInvoice.bind(this.invoices))(invoice);
+    }
+
+    /**
+     * CancelInvoice cancels a currently open invoice. If the invoice is already canceled, this call
+     * will succeed. If the invoice is (already settled, it will fail.
+     * Reference: https://api.lightning.community/#cancelinvoice
+     * @param payment_hash
+     * @returns
+     */
+    public cancelInvoice(payment_hash: Buffer): Promise<void> {
+        const options = {
+            payment_hash,
+        };
+        return promisify(this.invoices.cancelInvoice.bind(this.invoices))(options);
+    }
+
+    /**
+     * SettleInvoice settles an accepted invoice. If the invoice is already settled, this call will
+     * succeed.
+     * Reference: https://api.lightning.community/#settleinvoice
+     * @param preimage
+     * @returns
+     */
+    public settleInvoice(preimage: Buffer): Promise<void> {
+        const options = {
+            preimage,
+        };
+        return promisify(this.invoices.settleInvoice.bind(this.invoices))(options);
     }
 }
