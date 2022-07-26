@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Lighting application that uses invoices",
   "scripts": {  
-    "lint": "../node_modules/.bin/eslint .",
+    "start": "ts-node",
+    "lint": "eslint .",
     "test": "mocha --require ts-node/register --recursive \"__tests__/**/*.spec.ts\""  
   },
   "repository": {
