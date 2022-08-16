@@ -17,6 +17,7 @@ process.env.GRPC_SSL_CIPHER_SUITES = "HIGH+ECDSA";
 export class LndRpcClient implements ILndClient {
     protected lightning: any;
     protected invoices: any;
+    protected router: any;
 
     constructor(host: string, macaroon: Buffer, cert: Buffer) {
         const loaderOptions = {
@@ -28,8 +29,9 @@ export class LndRpcClient implements ILndClient {
         };
         const lightningPath = path.join(__dirname, "lightning.proto");
         const invoicesPath = path.join(__dirname, "invoices.proto");
+        const routerPath = path.join(__dirname, "router.proto");
         const packageDefinition = protoLoader.loadSync(
-            [lightningPath, invoicesPath],
+            [lightningPath, invoicesPath, routerPath],
             loaderOptions,
         );
         const definition: any = grpc.loadPackageDefinition(packageDefinition);
@@ -44,6 +46,7 @@ export class LndRpcClient implements ILndClient {
 
         this.lightning = new definition.lnrpc.Lightning(host, credentials);
         this.invoices = new definition.invoicesrpc.Invoices(host, credentials);
+        this.router = new definition.routerrpc.Router(host, credentials);
     }
 
     /**
@@ -226,5 +229,23 @@ export class LndRpcClient implements ILndClient {
             preimage,
         };
         return promisify(this.invoices.settleInvoice.bind(this.invoices))(options);
+    }
+
+    /**
+     * SendPaymentV2 attempts to route a payment described by the passed PaymentRequest to the final
+     * destination. The call returns a stream of payment updates.
+     * @param request
+     * @returns
+     */
+    public sendPaymentV2(
+        request: Partial<Lnd.SendPaymentRequest>,
+        cb: (payment: Lnd.Payment) => void,
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const stream = this.router.sendPaymentV2(request);
+            stream.on("data", d => cb(d));
+            stream.on("error", reject);
+            stream.on("end", resolve);
+        });
     }
 }

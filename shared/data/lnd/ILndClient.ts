@@ -17,4 +17,9 @@ export interface ILndClient {
     addHoldInvoice(options: Lnd.AddHoldInvoiceInput): Promise<Lnd.AddHoldInvoiceResult>;
     cancelInvoice(hash: Buffer): Promise<void>;
     settleInvoice(preimage: Buffer): Promise<void>;
+
+    sendPaymentV2(
+        request: Partial<Lnd.SendPaymentRequest>,
+        cb: (payment: Lnd.Payment) => void,
+    ): Promise<void>;
 }

@@ -5,6 +5,8 @@ export namespace Lnd {
     export type int64 = string;
     export type uint32 = number;
     export type int32 = number;
+    export type bytes = Buffer;
+    export type double = number;
 
     export interface Info {
         uris: string[];
@@ -283,5 +285,138 @@ export namespace Lnd {
     export interface VerifyMessageResponse {
         valid: boolean;
         pubkey: string;
+    }
+
+    export interface SendPaymentRequest {
+        dest: bytes;
+        amt: uint64;
+        amt_msat: uint64;
+        payment_hash: bytes;
+        final_cltv_delta: int32;
+        payment_addr: bytes;
+        payment_request: string;
+        timeout_seconds: int32;
+        fee_limit_sat: int64;
+        fee_limit_msat: int64;
+        outgoing_chan_id: uint64;
+        outgoing_chan_ids: uint64[];
+        last_hop_pubkey: bytes;
+        cltv_limit: int32;
+        route_hints: RouteHint[];
+        dest_custom_records: any;
+        allow_self_payment: boolean;
+        dest_features: number[];
+        max_parts: uint32;
+        no_inflight_updates: boolean;
+        max_shard_size_msat: uint64;
+        amp: boolean;
+        time_pref: double;
+    }
+
+    export interface Payment {
+        payment_hash: string;
+        value: int64;
+        creation_date: int64;
+        fee: int64;
+        payment_preimage: string;
+        value_sat: int64;
+        value_msat: int64;
+        payment_request: string;
+        status: PaymentStatus;
+        fee_sat: int64;
+        fee_msat: int64;
+        creation_time_ns: int64;
+        htlcs: HtlcAttempt[];
+        payment_index: uint64;
+        failure_reason: PaymentFailureReason;
+    }
+
+    export interface PaymentStatus {
+        state: PaymentState;
+        preimage: bytes;
+        htlcs: HtlcAttempt[];
+    }
+
+    export enum PaymentState {
+        IN_FLIGHT = 0,
+        SUCCEEDED = 1,
+        FAILED_TIMEOUT = 2,
+        FAILED_NO_ROUTE = 3,
+        FAILED_ERROR = 4,
+        FAILED_INCORRECT_PAYMENT_DETAILS = 5,
+        FAILED_INSUFFICIENT_BALANCE = 6,
+    }
+
+    export enum PaymentFailureReason {
+        FAILURE_REASON_NONE = 0,
+        FAILURE_REASON_TIMEOUT = 1,
+        FAILURE_REASON_NO_ROUTE = 2,
+        FAILURE_REASON_ERROR = 3,
+        FAILURE_REASON_INCORRECT_PAYMENT_DETAILS = 4,
+        FAILURE_REASON_INSUFFICIENT_BALANCE = 5,
+    }
+
+    export interface HtlcAttempt {
+        attempt_id: uint64;
+        status: HtlcStatus;
+        route: Route;
+        attempt_time_ns: int64;
+        resolve_time_ns: int64;
+        failure: Failure;
+        preimage: bytes;
+    }
+
+    export enum HtlcStatus {
+        IN_FLIGHT = 0,
+        SUCCEEDED = 1,
+        FAILED = 2,
+    }
+
+    export interface Failure {
+        code: number;
+        channel_update: ChannelUpdate;
+        htlc_msat: uint64;
+        onion_sha_256: bytes;
+        cltv_expiry: uint32;
+        flags: uint32;
+        failure_source_index: uint32;
+        height: uint32;
+    }
+
+    export interface ChannelUpdate {
+        signature: bytes;
+        chain_hash: bytes;
+        chain_id: uint64;
+        timestamp: uint32;
+        message_flags: uint32;
+        channel_flags: uint32;
+        time_lock_delta: uint32;
+        htlc_minimum_msat: uint64;
+        base_fee: uint32;
+        fee_rate: uint32;
+        htlc_maximum_msat: uint64;
+        extra_opaque_data: bytes;
+    }
+
+    export interface Route {
+        total_time_lock: uint32;
+        total_fees: int64;
+        total_amt: int64;
+        hops: Hop[];
+        total_fees_msat: int64;
+        total_amt_msat: int64;
+    }
+
+    export interface Hop {
+        chan_id: uint64;
+        chan_capacity: int64;
+        amt_to_forward: int64;
+        fee: int64;
+        expiry: uint32;
+        amt_to_forward_msat: int64;
+        fee_msat: int64;
+        pub_key: string;
+        tlv_payload: boolean;
+        metadata: bytes;
     }
 }

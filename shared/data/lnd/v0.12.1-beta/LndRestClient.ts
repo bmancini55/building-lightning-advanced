@@ -241,4 +241,17 @@ export class LndRestClient implements ILndClient {
             req.end();
         });
     }
+
+    /**
+     * SendPaymentV2 attempts to route a payment described by the passed PaymentRequest to the final
+     * destination. The call returns a stream of payment updates.
+     * @param request
+     * @returns
+     */
+    public sendPaymentV2(
+        request: Partial<Lnd.SendPaymentRequest>,
+        cb: (payment: Lnd.Payment) => void,
+    ): Promise<void> {
+        throw new Error("Not implemented");
+    }
 }
