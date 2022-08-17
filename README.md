@@ -1,6 +1,6 @@
-# Lightning Network Advanced Topics
+# Building on Lightning: Advanced Topics
 
-This repository shows examples of advanced Lightning Network topics.
+This repository contains code examples related to [Building on Lightning: Advanced Topics](https://bmancini55.github.io/building-lightning/advanced/intro.html).
 
 ## Getting Started
 
