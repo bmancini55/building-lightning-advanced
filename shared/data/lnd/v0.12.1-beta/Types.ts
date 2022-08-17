@@ -417,6 +417,92 @@ export namespace Lnd {
         fee_msat: int64;
         pub_key: string;
         tlv_payload: boolean;
+        mpp_record: MppRecord;
+        custom_records: any;
         metadata: bytes;
+    }
+
+    export interface BuildRouteRequest {
+        amt_msat: int64;
+        final_cltv_delta: int32;
+        outgoing_chan_id: uint64;
+        hop_pubkeys: bytes[];
+        payment_addr: bytes;
+    }
+
+    export interface BuildRouteResponse {
+        route: Route;
+    }
+
+    export interface MppRecord {
+        payment_addr: bytes;
+        total_amt_msat: int64;
+    }
+
+    export interface ListChannelsRequest {
+        active_only: boolean;
+        inactive_only: boolean;
+        public_only: boolean;
+        private_only: boolean;
+        peer: bytes;
+    }
+
+    export interface ListChannelsResponse {
+        channels: Channel[];
+    }
+
+    export interface Channel {
+        active: boolean;
+        remote_pubkey: string;
+        channel_point: string;
+        chan_id: uint64;
+        capacity: int64;
+        local_balance: int64;
+        remote_balance: int64;
+        commit_fee: int64;
+        commit_weight: int64;
+        fee_per_kw: int64;
+        unsettled_balance: int64;
+        total_satoshis_sent: int64;
+        total_satoshis_received: int64;
+        num_updates: uint64;
+        pending_htlcs: Htlc;
+        csv_delay: uint32;
+        private: boolean;
+        initiator: boolean;
+        chan_status_flags: string;
+        local_chan_reserve_set: int64;
+        remote_chan_reserve_set: int64;
+        static_remote_key: boolean;
+        commitment_type: any;
+        lifetime: int64;
+        uptime: int64;
+        close_address: string;
+        push_amount_sat: uint64;
+        thaw_height: uint32;
+        local_constraints: ChannelConstraints;
+        remote_constraints: ChannelConstraints;
+        alias_scids: uint64[];
+        zero_conf: boolean;
+        zero_conf_confirmed_scid: uint64;
+    }
+
+    export interface Htlc {
+        incoming: boolean;
+        amount: int64;
+        hash_lock: bytes;
+        expiration_height: uint32;
+        htlc_index: uint64;
+        forwarding_channel: uint64;
+        forwarding_htlc_index: uint64;
+    }
+
+    export interface ChannelConstraints {
+        csv_delay: uint32;
+        chan_reserve_sat: uint64;
+        dust_limit_sat: uint64;
+        max_pending_amt_msat: uint64;
+        min_htlc_msat: uint64;
+        max_accepted_htlcs: uint32;
     }
 }

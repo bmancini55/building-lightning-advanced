@@ -22,4 +22,13 @@ export interface ILndClient {
         request: Partial<Lnd.SendPaymentRequest>,
         cb: (payment: Lnd.Payment) => void,
     ): Promise<void>;
+
+    buildRoute(request: Partial<Lnd.BuildRouteRequest>): Promise<Lnd.BuildRouteResponse>;
+    sendToRouteV2(
+        payment_hash: Buffer,
+        route: Lnd.Route,
+        skip_temp_err: boolean,
+    ): Promise<Lnd.HtlcAttempt>;
+
+    listChannels(options?: Partial<Lnd.ListChannelsRequest>): Promise<Lnd.ListChannelsResponse>;
 }

@@ -254,4 +254,43 @@ export class LndRestClient implements ILndClient {
     ): Promise<void> {
         throw new Error("Not implemented");
     }
+
+    /**
+     * BuildRoute builds a fully specified route based on a list of hop public keys. It retrieves
+     * the relevant channel policies from the graph in order to calculate the correct fees and time locks.
+     * @param request
+     * @returns
+     */
+    public async buildRoute(
+        request: Partial<Lnd.BuildRouteRequest>,
+    ): Promise<Lnd.BuildRouteResponse> {
+        throw new Error("Method not implemented.");
+    }
+
+    /**
+     * SendToRouteV2 attempts to make a payment via the specified route. This method differs from
+     * SendPayment in that it allows users to specify a full route manually. This can be used for
+     * things like rebalancing, and atomic swaps.
+     * @param payment_hash
+     * @param route
+     * @param skip_temp_err
+     * @returns
+     */
+    public async sendToRouteV2(
+        payment_hash: Buffer,
+        route: Lnd.Route,
+        skip_temp_err: boolean,
+    ): Promise<Lnd.HtlcAttempt> {
+        throw new Error("Method not implemented.");
+    }
+
+    /**
+     * ListChannels returns a description of all the open channels that this node is a participant in.
+     * @param options
+     */
+    public async listChannels(
+        options?: Partial<Lnd.ListChannelsRequest>,
+    ): Promise<Lnd.ListChannelsResponse> {
+        throw new Error("Method not implemented.");
+    }
 }

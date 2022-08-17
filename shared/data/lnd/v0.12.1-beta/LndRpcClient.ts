@@ -248,4 +248,48 @@ export class LndRpcClient implements ILndClient {
             stream.on("end", resolve);
         });
     }
+
+    /**
+     * BuildRoute builds a fully specified route based on a list of hop public keys. It retrieves
+     * the relevant channel policies from the graph in order to calculate the correct fees and time locks.
+     * @param request
+     * @returns
+     */
+    public async buildRoute(
+        request: Partial<Lnd.BuildRouteRequest>,
+    ): Promise<Lnd.BuildRouteResponse> {
+        return promisify(this.router.buildRoute.bind(this.router))(request);
+    }
+
+    /**
+     * SendToRouteV2 attempts to make a payment via the specified route. This method differs from
+     * SendPayment in that it allows users to specify a full route manually. This can be used for
+     * things like rebalancing, and atomic swaps.
+     * @param payment_hash
+     * @param route
+     * @param skip_temp_err
+     * @returns
+     */
+    public async sendToRouteV2(
+        payment_hash: Buffer,
+        route: Lnd.Route,
+        skip_temp_err = false,
+    ): Promise<Lnd.HtlcAttempt> {
+        const options = {
+            payment_hash,
+            route,
+            skip_temp_err,
+        };
+        return promisify(this.router.sendToRouteV2.bind(this.router))(options);
+    }
+
+    /**
+     * ListChannels returns a description of all the open channels that this node is a participant in.
+     * @param options
+     */
+    public async listChannels(
+        options: Partial<Lnd.ListChannelsRequest> = {},
+    ): Promise<Lnd.ListChannelsResponse> {
+        return promisify(this.lightning.listChannels.bind(this.lightning))(options);
+    }
 }
