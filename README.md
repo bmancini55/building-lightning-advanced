@@ -13,7 +13,6 @@ This repository contains code examples related to [Building on Lightning: Advanc
 Example `.env` file contents:
 
 ```
-LND_REST_HOST=https://127.0.0.1:8081
 LND_RPC_HOST=127.0.0.1:10001
 LND_ADMIN_MACAROON_PATH=/Users/brian/.polar/networks/1/volumes/lnd/alice/data/chain/bitcoin/regtest/admin.macaroon
 LND_CERT_PATH=/Users/brian/.polar/networks/1/volumes/lnd/alice/tls.cert
