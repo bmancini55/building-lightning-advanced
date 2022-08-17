@@ -1,7 +1,7 @@
 {
-  "name": "building-lightning-invoices",
+  "name": "building-lightning-advanced",
   "version": "1.0.0",
-  "description": "Lighting application that uses invoices",
+  "description": "Lighting application advanced topics",
   "scripts": {  
     "start": "ts-node",
     "lint": "eslint .",
@@ -9,15 +9,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bmancini55/building-lightning-invoices.git"
+    "url": "git+https://github.com/bmancini55/building-lightning-advanced.git"
   },
   "keywords": [],
   "author": "Brian Mancini <bmancini@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/bmancini55/building-lightning-invoices/issues"
+    "url": "https://github.com/bmancini55/building-lightning-advanced/issues"
   },
-  "homepage": "https://github.com/bmancini55/building-lightning-invoices#readme",
+  "homepage": "https://github.com/bmancini55/building-lightning-advanced#readme",
   "devDependencies": {
     "@types/chai": "^4.3.1",
     "@types/mocha": "^9.1.1",
