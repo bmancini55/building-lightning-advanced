@@ -31,4 +31,9 @@ export interface ILndClient {
     ): Promise<Lnd.HtlcAttempt>;
 
     listChannels(options?: Partial<Lnd.ListChannelsRequest>): Promise<Lnd.ListChannelsResponse>;
+
+    subscribeSingleInvoice(
+        request: Lnd.SubscribeSingleInvoiceRequest,
+        cb: (invoice: Lnd.Invoice) => void,
+    ): Promise<void>;
 }

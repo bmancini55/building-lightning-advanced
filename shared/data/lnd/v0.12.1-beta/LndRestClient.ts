@@ -293,4 +293,19 @@ export class LndRestClient implements ILndClient {
     ): Promise<Lnd.ListChannelsResponse> {
         throw new Error("Method not implemented.");
     }
+
+    /**
+     * SubscribeSingleInvoice returns a uni-directional stream (server -> client) to notify the
+     * client of state transitions of the specified invoice. Initially the current invoice state is
+     * always sent out.
+     * @param request
+     * @param cb
+     * @returns
+     */
+    public subscribeSingleInvoice(
+        request: Lnd.SubscribeSingleInvoiceRequest,
+        cb: (invoice: Lnd.Invoice) => void,
+    ): Promise<void> {
+        throw new Error("Method not implemented.");
+    }
 }

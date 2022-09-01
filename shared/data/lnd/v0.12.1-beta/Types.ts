@@ -505,4 +505,8 @@ export namespace Lnd {
         min_htlc_msat: uint64;
         max_accepted_htlcs: uint32;
     }
+
+    export interface SubscribeSingleInvoiceRequest {
+        r_hash: bytes;
+    }
 }

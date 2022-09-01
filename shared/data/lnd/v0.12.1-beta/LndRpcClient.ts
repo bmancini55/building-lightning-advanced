@@ -292,4 +292,24 @@ export class LndRpcClient implements ILndClient {
     ): Promise<Lnd.ListChannelsResponse> {
         return promisify(this.lightning.listChannels.bind(this.lightning))(options);
     }
+
+    /**
+     * SubscribeSingleInvoice returns a uni-directional stream (server -> client) to notify the
+     * client of state transitions of the specified invoice. Initially the current invoice state is
+     * always sent out.
+     * @param request
+     * @param cb
+     * @returns
+     */
+    public subscribeSingleInvoice(
+        request: Lnd.SubscribeSingleInvoiceRequest,
+        cb: (invoice: Lnd.Invoice) => void,
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const stream = this.invoices.subscribeSingleInvoice(request);
+            stream.on("data", d => cb(d));
+            stream.on("error", reject);
+            stream.on("end", resolve);
+        });
+    }
 }
