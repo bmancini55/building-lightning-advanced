@@ -15,10 +15,10 @@ export class BlockMonitor {
 
     public async sync() {
         this.bestBlockHash = await this.bitcoind.getBlockHash(1);
-        console.log("block", this.bestBlockHash);
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
+            console.log("block", this.bestBlockHash);
             const block = await this.bitcoind.getBlock(this.bestBlockHash);
 
             for (const handler of this.handlers) {
@@ -29,7 +29,6 @@ export class BlockMonitor {
                 break;
             } else {
                 this.bestBlockHash = block.nextblockhash;
-                console.log("block", this.bestBlockHash);
             }
         }
     }
@@ -37,17 +36,21 @@ export class BlockMonitor {
     public async watch() {
         // eslint-disable-next-line no-constant-condition
         while (true) {
-            const block = await this.bitcoind.getBlock(this.bestBlockHash);
+            const currentBlock = await this.bitcoind.getBlock(this.bestBlockHash);
+            if (currentBlock.nextblockhash && currentBlock.nextblockhash !== this.bestBlockHash) {
+                // get the next block
+                const nextBlock = await this.bitcoind.getBlock(currentBlock.nextblockhash);
+                console.log("block", nextBlock.hash);
 
-            for (const handler of this.handlers) {
-                await handler(block);
-            }
+                // adjust the next hash
+                this.bestBlockHash = nextBlock.hash;
 
-            if (!block.nextblockhash) {
-                await wait(5000);
+                // fire a handler for attachment
+                for (const handler of this.handlers) {
+                    await handler(nextBlock);
+                }
             } else {
-                this.bestBlockHash = block.nextblockhash;
-                console.log("block", this.bestBlockHash);
+                await wait(5000);
             }
         }
     }

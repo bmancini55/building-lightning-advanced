@@ -8,7 +8,15 @@ import { createHtlcDescriptor } from "./CreateHtlcDescriptor";
 import { BlockMonitor } from "./BlockMonitor";
 
 async function run() {
+    // enter their
     let result: any = await prompt({
+        type: "input",
+        name: "address",
+        message: "Enter the service nodes address",
+    });
+    const theirAddress = result.address;
+
+    result = await prompt({
         type: "input",
         name: "privkey",
         message: "Enter a private key or leave blank to generate one",
@@ -30,11 +38,6 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
-    const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(monitor);
-    await monitor.sync();
-    monitor.watch();
-
     // construct a preimage and a hash
     result = await prompt({
         type: "input",
@@ -47,14 +50,6 @@ async function run() {
     const hash = sha256(preimage);
     console.log("hash", hash.toString("hex"));
 
-    // enter their
-    result = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter the service nodes address",
-    });
-    const theirAddress = result.address;
-
     result = await prompt({
         type: "input",
         name: "htlcamount",
@@ -62,15 +57,43 @@ async function run() {
     });
     const htlcAmount = Bitcoin.Value.fromSats(Number(result.htlcamount));
 
-    result = await prompt({
-        type: "input",
-        name: "htlcutxo",
-        message: "Enter the htlc utxo",
-    });
-    const htlcUtox = result.htlcutxo;
-    const tx = createClaimTx(theirAddress, hash, preimage, ourPrivKey, htlcAmount, htlcUtox);
+    // perform a chain sync
+    console.log("synchronizing chain");
+    const monitor = new BlockMonitor(bitcoind);
+    const wallet = new Wallet(monitor);
+    wallet.addKey(ourPrivKey);
 
-    await bitcoind.sendRawTransaction(tx);
+    // waiting for
+    console.log("waiting for htlc transaction");
+    const htlcScripPubKey = Bitcoin.Script.p2wshLock(
+        createHtlcDescriptor(
+            hash,
+            ourPrivKey.toPubKey(true).hash160(),
+            Bitcoin.Address.decodeBech32(theirAddress).program,
+        ),
+    );
+
+    monitor.add(async (block: Bitcoind.Block) => {
+        for (const tx of block.tx) {
+            for (const vout of tx.vout) {
+                if (vout.scriptPubKey.hex === htlcScripPubKey.serializeCmds().toString("hex")) {
+                    const claimTx = createClaimTx(
+                        theirAddress,
+                        hash,
+                        preimage,
+                        ourPrivKey,
+                        htlcAmount,
+                        `${tx.txid}:${vout.n}`,
+                    );
+                    console.log("found transaction, spending");
+                    await bitcoind.sendRawTransaction(claimTx);
+                }
+            }
+        }
+    });
+
+    await monitor.sync();
+    monitor.watch();
 }
 
 run().catch(console.error);
