@@ -154,6 +154,14 @@ async function run() {
     console.log(`adding funds to ${ourAddress}`);
     service.bitcoind.sendToAddress(ourPrivKey.toPubKey(true).toP2wpkhAddress(), 1);
 
+    // prompt for their address
+    result = await prompt({
+        type: "input",
+        name: "address",
+        message: "Enter their payment address",
+    });
+    const theirAddress = result.address;
+
     // prompt for the value
     result = await prompt({
         type: "input",
@@ -169,14 +177,6 @@ async function run() {
         message: "Enter the value in satoshis",
     });
     const satoshis = Bitcoin.Value.fromSats(Number(result.satoshis));
-
-    // prompt for their address
-    result = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter their payment address",
-    });
-    const theirAddress = result.address;
 
     // create an invoice for the amount
     const invoice = await service.generateInvoice(hash, Number(satoshis.sats));

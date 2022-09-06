@@ -38,6 +38,15 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
+    // perform a chain sync
+    console.log("synchronizing chain");
+    const monitor = new BlockMonitor(bitcoind);
+    const wallet = new Wallet(monitor);
+    wallet.addKey(ourPrivKey);
+
+    await monitor.sync();
+    monitor.watch();
+
     // construct a preimage and a hash
     result = await prompt({
         type: "input",
@@ -57,13 +66,7 @@ async function run() {
     });
     const htlcAmount = Bitcoin.Value.fromSats(Number(result.htlcamount));
 
-    // perform a chain sync
-    console.log("synchronizing chain");
-    const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(monitor);
-    wallet.addKey(ourPrivKey);
-
-    // waiting for
+    // waiting for broadcast htlc transaction
     console.log("waiting for htlc transaction");
     const htlcScripPubKey = Bitcoin.Script.p2wshLock(
         createHtlcDescriptor(
@@ -72,7 +75,6 @@ async function run() {
             Bitcoin.Address.decodeBech32(theirAddress).program,
         ),
     );
-
     monitor.add(async (block: Bitcoind.Block) => {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
@@ -91,9 +93,6 @@ async function run() {
             }
         }
     });
-
-    await monitor.sync();
-    monitor.watch();
 }
 
 run().catch(console.error);
