@@ -1,11 +1,12 @@
 import crypto from "crypto";
 import * as Bitcoin from "@node-lightning/bitcoin";
-import { BitcoindClient, Transaction } from "@node-lightning/bitcoind";
+import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
 import { ILndClient } from "../../shared/data/lnd/ILndClient";
 import { Lnd } from "../../shared/data/lnd/v0.12.1-beta/Types";
-import { sha256 } from "../../shared/Sha256";
-import { OutPoint, Tx } from "@node-lightning/bitcoin";
+import { OutPoint, PrivateKey, Tx } from "@node-lightning/bitcoin";
+import { Wallet } from "./Wallet";
+import { prompt } from "enquirer";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -67,7 +68,7 @@ export class LoopService {
         txBuilder.addInput(utxo, Bitcoin.Sequence.rbf());
 
         // add the change output
-        const fees = Bitcoin.Value.fromSats(3000); // use a fixed fee for simplicity
+        const fees = Bitcoin.Value.fromSats(244); // use a fixed fee for simplicity
         const changeOutput = utxoValue.clone();
         changeOutput.sub(amount);
         changeOutput.sub(fees);
@@ -152,7 +153,7 @@ async function run() {
     const service = new LoopService();
     await service.start();
 
-    // Prereqs:
+    // PreReqs:
     // Hash
     // Private key of funds of funds
 
@@ -164,39 +165,76 @@ async function run() {
     // Bob pays the transaction
     // Alice sees the HTLC payment and settles online
 
-    const hash = Buffer.from(process.argv[2], "hex");
-    console.log("hash", hash.toString("hex"));
+    // generate a private key for our wallet
 
-    console.log(process.argv);
-    const satoshis = Bitcoin.Value.fromSats(Number(process.argv[3]));
-    console.log("satoshis", satoshis);
-
-    //
+    let result: any = await prompt({
+        type: "input",
+        name: "privkey",
+        message: "Enter a private key or leave blank to generate one",
+    });
     const ourPrivKey = new Bitcoin.PrivateKey(
-        Buffer.from(process.argv[4], "hex"),
+        result.privkey ? Buffer.from(result.privkey, "hex") : crypto.randomBytes(32),
         Bitcoin.Network.regtest,
     );
-    console.log("our address", ourPrivKey.toPubKey(true).toP2wpkhAddress());
+    const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
+    console.log("our private key", ourPrivKey.toHex());
+    console.log("our address", ourAddress);
 
-    // get the source of our funds
-    const utxo = Bitcoin.OutPoint.fromString(process.argv[5]);
+    const wallet = new Wallet(
+        service.bitcoind,
+        ourPrivKey,
+        () => {
+            /**  */
+        },
+        () => {
+            /** */
+        },
+    );
+    console.log("performing sync");
+    await wallet.sync();
+    wallet.monitor();
 
-    // their address
-    const theirAddress = process.argv[6];
-    console.log("their address", theirAddress);
+    // add  some funds to the private key
+    console.log(`adding funds to ${ourAddress}`);
+    service.bitcoind.sendToAddress(ourPrivKey.toPubKey(true).toP2wpkhAddress(), 1);
 
+    // prompt for the value
+    result = await prompt({
+        type: "input",
+        name: "hash",
+        message: "Enter the hash from the user",
+    });
+    const hash = Buffer.from(result.hash, "hex");
+
+    // prompt for the value
+    result = await prompt({
+        type: "input",
+        name: "satoshis",
+        message: "Enter the value in satoshis",
+    });
+    const satoshis = Bitcoin.Value.fromSats(Number(result.satoshis));
+
+    // prompt for their address
+    result = await prompt({
+        type: "input",
+        name: "address",
+        message: "Enter their payment address",
+    });
+    const theirAddress = result.address;
+
+    // create an invoice for the amount
     const invoice = await service.generateInvoice(hash, Number(satoshis.sats));
-    console.log("they need to pay this invoice", invoice);
+    console.log("they need to pay this invoice", invoice.payment_request);
 
     // wait for the invoice to be paid
     await service.waitForInvoicePayment(hash);
     console.log("invoice has been paid");
 
     // construct and broadcast tx
+    const utxo = OutPoint.fromString(wallet.getUtxo());
     const tx = await service.createOnChainHtlc(hash, satoshis, theirAddress, ourPrivKey, utxo);
     const htlcTxId = await service.sendTx(tx);
-    console.log("broadcast txid", htlcTxId);
-    console.log("they should utxo", htlcTxId + ":1");
+    console.log("send utxo", htlcTxId);
 
     // wait for spend
     const htlcOutpoint = new Bitcoin.OutPoint(htlcTxId, 1);
