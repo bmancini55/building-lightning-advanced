@@ -7,6 +7,7 @@ import { Lnd } from "../../shared/data/lnd/v0.12.1-beta/Types";
 import { OutPoint, PrivateKey, Tx } from "@node-lightning/bitcoin";
 import { Wallet } from "./Wallet";
 import { prompt } from "enquirer";
+import { createHtlcDescriptor as createHtlcDescriptor } from "./CreateHtlcDescriptor";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -76,25 +77,12 @@ export class LoopService {
         txBuilder.addOutput(changeOutput, changeScriptPubKey);
 
         // add the amount output
-        const htlcScriptPubKey = new Bitcoin.Script(
-            Bitcoin.OpCode.OP_SHA256,
+        const htlcScriptPubKey = createHtlcDescriptor(
             hash,
-            Bitcoin.OpCode.OP_EQUAL,
-            Bitcoin.OpCode.OP_IF,
-                Bitcoin.OpCode.OP_DUP,
-                Bitcoin.OpCode.OP_HASH160,
-                theirAddressDecoded.program,
-            Bitcoin.OpCode.OP_ELSE,
-                Bitcoin.Script.number(20),
-                Bitcoin.OpCode.OP_CHECKSEQUENCEVERIFY,
-                Bitcoin.OpCode.OP_DROP,
-                Bitcoin.OpCode.OP_DUP,
-                Bitcoin.OpCode.OP_HASH160,
-                ourPubKey.hash160(),  // technically should go to htlc pubkey
-            Bitcoin.OpCode.OP_ENDIF,
-            Bitcoin.OpCode.OP_EQUALVERIFY,
-            Bitcoin.OpCode.OP_CHECKSIG,
-        ); // prettier-ignore
+            theirAddressDecoded.program,
+            ourPubKey.hash160(),
+        );
+
         txBuilder.addOutput(amount, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
         txBuilder.locktime = Bitcoin.LockTime.zero();
 

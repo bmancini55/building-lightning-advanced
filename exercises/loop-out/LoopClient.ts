@@ -4,6 +4,7 @@ import * as Bitcoin from "@node-lightning/bitcoin";
 import { Wallet } from "./Wallet";
 import { prompt } from "enquirer";
 import { sha256 } from "../../shared/Sha256";
+import { createHtlcDescriptor } from "./CreateHtlcDescriptor";
 
 async function run() {
     let result: any = await prompt({
@@ -90,25 +91,11 @@ function createClaimTx(
 ) {
     const theirAddressDecoded = Bitcoin.Address.decodeBech32(theirAddress);
 
-    const htlcScript = new Bitcoin.Script(
-        Bitcoin.OpCode.OP_SHA256,
+    const htlcScript = createHtlcDescriptor(
         hash,
-        Bitcoin.OpCode.OP_EQUAL,
-        Bitcoin.OpCode.OP_IF,
-            Bitcoin.OpCode.OP_DUP,
-            Bitcoin.OpCode.OP_HASH160,
-            ourPrivKey.toPubKey(true).hash160(),
-        Bitcoin.OpCode.OP_ELSE,
-            Bitcoin.Script.number(20),
-            Bitcoin.OpCode.OP_CHECKSEQUENCEVERIFY,
-            Bitcoin.OpCode.OP_DROP,
-            Bitcoin.OpCode.OP_DUP,
-            Bitcoin.OpCode.OP_HASH160,
-            theirAddressDecoded.program,
-        Bitcoin.OpCode.OP_ENDIF,
-        Bitcoin.OpCode.OP_EQUALVERIFY,
-        Bitcoin.OpCode.OP_CHECKSIG,
-    ); // prettier-ignore
+        ourPrivKey.toPubKey(true).hash160(),
+        theirAddressDecoded.program,
+    );
 
     console.log(htlcScript.sha256().toString("hex"));
 
