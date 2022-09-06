@@ -8,27 +8,36 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  */
 export class Wallet {
     public bestBlockHash: string;
-    public utxos: Map<string, Bitcoin.Value> = new Map();
-    public readonly scriptPubKey: Bitcoin.Script;
-    public readonly scriptPubKeyHex: string;
+    public keys: Set<Bitcoin.PrivateKey> = new Set();
+    public utxos: Set<string> = new Set();
+    public scriptPubKeys: Set<string> = new Set();
 
     public constructor(
         readonly bitcoind: Bitcoind.BitcoindClient,
-        readonly pk: Bitcoin.PrivateKey,
         readonly onReceive: (tx: Bitcoind.Transaction, vout: Bitcoind.Output) => void,
         readonly onSpend: (tx: Bitcoind.Transaction, vin: Bitcoind.Input) => void,
-    ) {
-        this.scriptPubKey = Bitcoin.Script.p2wpkhLock(this.pk.toPubKey(true).hash160());
+    ) {}
 
-        this.scriptPubKeyHex = this.scriptPubKey.serializeCmds().toString("hex");
+    public addKey(key: Bitcoin.PrivateKey) {
+        this.keys.add(key);
+        this.addScriptPubKey(Bitcoin.Script.p2wpkhLock(key.toPubKey(true).toBuffer()));
+    }
+
+    public addScriptPubKey(script: Bitcoin.Script) {
+        this.scriptPubKeys.add(script.serializeCmds().toString("hex"));
     }
 
     public getUtxo(): string {
         return this.utxos.keys().next().value;
     }
 
+    /**
+     * Performs a simplified synchronization for watched addresses.
+     */
     public async sync() {
-        //
+        // We start at block 1 since we are assuming that we are using regtest and can quickly do
+        // a full sync. Normally we would introduce a block height birthdate and scan from that
+        // height only.
         this.bestBlockHash = await this.bitcoind.getBlockHash(1);
 
         // eslint-disable-next-line no-constant-condition
@@ -60,12 +69,11 @@ export class Wallet {
 
     protected async processBlock(block: Bitcoind.Block) {
         // scan for receipt
-        const results = this.scanBlockForReceipt(block, this.scriptPubKeyHex);
+        const results = this.scanBlockForReceipt(block, this.scriptPubKeys);
         for (const [tx, vout] of results) {
             const utxo = `${tx.txid}:${vout.n}`;
-            const value = Bitcoin.Value.fromBitcoin(vout.value);
-            console.log(`received ${utxo} ${vout.value}`);
-            this.utxos.set(utxo, value);
+            console.log(`received ${utxo}`);
+            this.utxos.add(utxo);
             await this.onReceive(tx, vout);
         }
 
@@ -73,8 +81,7 @@ export class Wallet {
         const spends = this.scanBlockForSpend(block, this.utxos);
         for (const [tx, vin] of spends) {
             const utxo = `${vin.txid}:${vin.vout}`;
-            const value = this.utxos.get(utxo);
-            console.log(`spent ${utxo} ${value.bitcoin}`);
+            console.log(`spent ${utxo}`);
             this.utxos.delete(utxo);
             await this.onSpend(tx, vin);
         }
@@ -82,10 +89,10 @@ export class Wallet {
 
     protected *scanBlockForReceipt(
         block: Bitcoind.Block,
-        scriptSig: string,
+        scriptPubKeys: Set<string>,
     ): Generator<[Bitcoind.Transaction, Bitcoind.Output]> {
         for (const tx of block.tx) {
-            const vouts = this.scanTxForReceipt(tx, scriptSig);
+            const vouts = this.scanTxForReceipt(tx, scriptPubKeys);
             for (const vout of vouts) {
                 yield [tx, vout];
             }
@@ -94,10 +101,10 @@ export class Wallet {
 
     protected *scanTxForReceipt(
         tx: Bitcoind.Transaction,
-        scriptSig: string,
+        scriptPubKeys: Set<string>,
     ): Generator<Bitcoind.Output> {
         for (const vout of tx.vout) {
-            if (vout.scriptPubKey.hex === scriptSig) {
+            if (scriptPubKeys.has(vout.scriptPubKey.hex)) {
                 yield vout;
             }
         }
@@ -105,7 +112,7 @@ export class Wallet {
 
     protected *scanBlockForSpend(
         block: Bitcoind.Block,
-        outpoints: Map<string, Bitcoin.Value>,
+        outpoints: Set<string>,
     ): Generator<[Bitcoind.Transaction, Bitcoind.Input]> {
         for (const tx of block.tx) {
             const vins = this.scanTxForSpend(tx, outpoints);
@@ -117,7 +124,7 @@ export class Wallet {
 
     protected *scanTxForSpend(
         tx: Bitcoind.Transaction,
-        outpoints: Map<string, Bitcoin.Value>,
+        outpoints: Set<string>,
     ): Generator<Bitcoind.Input> {
         for (const vin of tx.vin) {
             const outpoint = `${vin.txid}:${vin.vout}`;

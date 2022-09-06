@@ -182,7 +182,6 @@ async function run() {
 
     const wallet = new Wallet(
         service.bitcoind,
-        ourPrivKey,
         () => {
             /**  */
         },
@@ -190,6 +189,8 @@ async function run() {
             /** */
         },
     );
+    wallet.addKey(ourPrivKey);
+
     console.log("performing sync");
     await wallet.sync();
     wallet.monitor();

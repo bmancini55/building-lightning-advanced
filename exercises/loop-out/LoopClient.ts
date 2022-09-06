@@ -30,7 +30,6 @@ async function run() {
 
     const wallet = new Wallet(
         bitcoind,
-        ourPrivKey,
         () => {
             /**  */
         },
