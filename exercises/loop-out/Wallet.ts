@@ -1,7 +1,6 @@
 import * as Bitcoin from "@node-lightning/bitcoin";
 import * as Bitcoind from "@node-lightning/bitcoind";
-
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { BlockMonitor } from "./BlockMonitor";
 
 /**
  * This is a very basic wallet that monitors the P2WPKH address for a single key.
@@ -12,11 +11,9 @@ export class Wallet {
     public utxos: Set<string> = new Set();
     public scriptPubKeys: Set<string> = new Set();
 
-    public constructor(
-        readonly bitcoind: Bitcoind.BitcoindClient,
-        readonly onReceive: (tx: Bitcoind.Transaction, vout: Bitcoind.Output) => void,
-        readonly onSpend: (tx: Bitcoind.Transaction, vin: Bitcoind.Input) => void,
-    ) {}
+    public constructor(readonly blockMonitor: BlockMonitor) {
+        blockMonitor.handlers.add(this.processBlock.bind(this));
+    }
 
     public addKey(key: Bitcoin.PrivateKey) {
         this.keys.add(key);
@@ -31,42 +28,6 @@ export class Wallet {
         return this.utxos.keys().next().value;
     }
 
-    /**
-     * Performs a simplified synchronization for watched addresses.
-     */
-    public async sync() {
-        // We start at block 1 since we are assuming that we are using regtest and can quickly do
-        // a full sync. Normally we would introduce a block height birthdate and scan from that
-        // height only.
-        this.bestBlockHash = await this.bitcoind.getBlockHash(1);
-
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-            console.log("syncing", this.bestBlockHash);
-            const block = await this.bitcoind.getBlock(this.bestBlockHash);
-
-            await this.processBlock(block);
-
-            if (!block.nextblockhash) break;
-            this.bestBlockHash = block.nextblockhash;
-        }
-    }
-
-    public async monitor() {
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-            const bestHash = await this.bitcoind.getBestBlockHash();
-            if (bestHash !== this.bestBlockHash) {
-                console.log("block", bestHash);
-                this.bestBlockHash = bestHash;
-
-                const block = await this.bitcoind.getBlock(bestHash);
-                await this.processBlock(block);
-            }
-            await wait(5000); // try every 5 seconds
-        }
-    }
-
     protected async processBlock(block: Bitcoind.Block) {
         // scan for receipt
         const results = this.scanBlockForReceipt(block, this.scriptPubKeys);
@@ -74,7 +35,6 @@ export class Wallet {
             const utxo = `${tx.txid}:${vout.n}`;
             console.log(`received ${utxo}`);
             this.utxos.add(utxo);
-            await this.onReceive(tx, vout);
         }
 
         // scan for spend
@@ -83,7 +43,6 @@ export class Wallet {
             const utxo = `${vin.txid}:${vin.vout}`;
             console.log(`spent ${utxo}`);
             this.utxos.delete(utxo);
-            await this.onSpend(tx, vin);
         }
     }
 

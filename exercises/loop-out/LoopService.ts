@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import * as Bitcoin from "@node-lightning/bitcoin";
+import * as Bitcoind from "@node-lightning/bitcoind";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
 import { ILndClient } from "../../shared/data/lnd/ILndClient";
@@ -8,6 +9,7 @@ import { OutPoint, PrivateKey, Tx } from "@node-lightning/bitcoin";
 import { Wallet } from "./Wallet";
 import { prompt } from "enquirer";
 import { createHtlcDescriptor as createHtlcDescriptor } from "./CreateHtlcDescriptor";
+import { BlockMonitor } from "./BlockMonitor";
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -51,7 +53,7 @@ export class LoopService {
         });
     }
 
-    public async createOnChainHtlc(
+    public async createHtlcTx(
         hash: Buffer,
         amount: Bitcoin.Value,
         theirAddress: string,
@@ -104,34 +106,6 @@ export class LoopService {
         return await this.bitcoind.sendRawTransaction(tx.toHex());
     }
 
-    public async waitForHtlcSpend(outpoint: OutPoint): Promise<Buffer> {
-        let lastHash: string = await this.bitcoind.getBestBlockHash();
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-            const bestHash = await this.bitcoind.getBestBlockHash();
-            if (bestHash !== lastHash) {
-                console.log("block", bestHash);
-                const block = await this.bitcoind.getBlock(bestHash);
-                lastHash = block.hash;
-                // should handle chain reorgs
-                for (const tx of block.tx) {
-                    for (const input of tx.vin) {
-                        // we have a match!
-                        if (
-                            input.txid === outpoint.txid.toString(Bitcoin.HashByteOrder.RPC) &&
-                            input.vout === outpoint.outputIndex
-                        ) {
-                            // extract preimage
-                            const witness = Buffer.from(input.txinwitness[2], "hex");
-                            return witness;
-                        }
-                    }
-                }
-            }
-            await wait(5000); // try every 5 seconds
-        }
-    }
-
     public async settleInvoice(preimage: Buffer): Promise<void> {
         await this.lightning.settleInvoice(preimage);
     }
@@ -168,20 +142,13 @@ async function run() {
     console.log("our private key", ourPrivKey.toHex());
     console.log("our address", ourAddress);
 
-    const wallet = new Wallet(
-        service.bitcoind,
-        () => {
-            /**  */
-        },
-        () => {
-            /** */
-        },
-    );
+    const monitor = new BlockMonitor(service.bitcoind);
+    const wallet = new Wallet(monitor);
     wallet.addKey(ourPrivKey);
 
     console.log("performing sync");
-    await wallet.sync();
-    wallet.monitor();
+    await monitor.sync();
+    monitor.watch();
 
     // add  some funds to the private key
     console.log(`adding funds to ${ourAddress}`);
@@ -219,22 +186,42 @@ async function run() {
     await service.waitForInvoicePayment(hash);
     console.log("invoice has been paid");
 
-    // construct and broadcast tx
+    // Get a utxo with available funds. This is a simplification but normally we would obtain one
+    // or more UTXOs from the wallet that have enough value.
     const utxo = OutPoint.fromString(wallet.getUtxo());
-    const tx = await service.createOnChainHtlc(hash, satoshis, theirAddress, ourPrivKey, utxo);
+
+    // Create the HTLC transaction
+    const tx = await service.createHtlcTx(hash, satoshis, theirAddress, ourPrivKey, utxo);
+
+    // Watch the outpoint
+    wallet.utxos.add(tx.txId.toString() + ":1");
+
+    // Broadcast the transaction
     const htlcTxId = await service.sendTx(tx);
     console.log("send utxo", htlcTxId);
 
-    // wait for spend
+    // wait for spend of HTLC
     const htlcOutpoint = new Bitcoin.OutPoint(htlcTxId, 1);
-    const foundPreimage = await service.waitForHtlcSpend(htlcOutpoint);
+    monitor.add(async block => {
+        for (const tx of block.tx) {
+            for (const input of tx.vin) {
+                // we have a match!
+                if (
+                    input.txid === htlcOutpoint.txid.toString(Bitcoin.HashByteOrder.RPC) &&
+                    input.vout === htlcOutpoint.outputIndex
+                ) {
+                    // extract preimage
+                    const preimage = Buffer.from(input.txinwitness[2], "hex");
+                    console.log("received preimage", preimage.toString("hex"));
 
-    console.log("received preimage", foundPreimage.toString("hex"));
-
-    if (foundPreimage.length) {
-        service.settleInvoice(foundPreimage);
-        console.log("complete");
-    }
+                    if (preimage.length) {
+                        await service.settleInvoice(preimage);
+                        console.log("complete");
+                    }
+                }
+            }
+        }
+    });
 }
 
 run().catch(console.error);

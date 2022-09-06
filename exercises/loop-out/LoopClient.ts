@@ -5,6 +5,7 @@ import { Wallet } from "./Wallet";
 import { prompt } from "enquirer";
 import { sha256 } from "../../shared/Sha256";
 import { createHtlcDescriptor } from "./CreateHtlcDescriptor";
+import { BlockMonitor } from "./BlockMonitor";
 
 async function run() {
     let result: any = await prompt({
@@ -29,17 +30,10 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
-    const wallet = new Wallet(
-        bitcoind,
-        () => {
-            /**  */
-        },
-        () => {
-            /**  */
-        },
-    );
-    await wallet.sync();
-    wallet.monitor();
+    const monitor = new BlockMonitor(bitcoind);
+    const wallet = new Wallet(monitor);
+    await monitor.sync();
+    monitor.watch();
 
     // construct a preimage and a hash
     result = await prompt({
