@@ -9,29 +9,27 @@ export class Options {
      * Constructs an Options instance from environment variables
      * @returns
      */
-    public static async fromEnv(): Promise<Options> {
-        const port = Number(process.env.PORT);
-        const lndRestHost = process.env.LND_REST_HOST;
-        const lndRpcHost = process.env.LND_RPC_HOST;
-        const lndCert = await fs.readFile(process.env.LND_CERT_PATH);
+    public static async fromEnv(prefix = ""): Promise<Options> {
+        const lndRestHost = getEnv(prefix, "LND_REST_HOST");
+        const lndRpcHost = getEnv(prefix, "LND_RPC_HOST");
+        const lndCert = await fs.readFile(getEnv(prefix, "LND_CERT_PATH"));
 
         let lndAdminMacaroon: Buffer;
-        if (process.env.LND_ADMIN_MACAROON_PATH) {
-            lndAdminMacaroon = await fs.readFile(process.env.LND_ADMIN_MACAROON_PATH);
+        if (getEnv(prefix, "LND_ADMIN_MACAROON_PATH")) {
+            lndAdminMacaroon = await fs.readFile(getEnv(prefix, "LND_ADMIN_MACAROON_PATH"));
         }
 
         let lndInvoiceMacaroon: Buffer;
-        if (process.env.LND_INVOICE_MACAROON_PATH) {
-            lndInvoiceMacaroon = await fs.readFile(process.env.LND_INVOICE_MACAROON_PATH);
+        if (getEnv(prefix, "LND_INVOICE_MACAROON_PATH")) {
+            lndInvoiceMacaroon = await fs.readFile(getEnv(prefix, "LND_INVOICE_MACAROON_PATH"));
         }
 
         let lndReadonlyMacaroon: Buffer;
-        if (process.env.LND_READONLY_MACAROON_PATH) {
-            lndReadonlyMacaroon = await fs.readFile(process.env.LND_READONLY_MACAROON_PATH);
+        if (getEnv(prefix, "LND_READONLY_MACAROON_PATH")) {
+            lndReadonlyMacaroon = await fs.readFile(getEnv(prefix, "LND_READONLY_MACAROON_PATH"));
         }
 
         return new Options(
-            port,
             lndRestHost,
             lndRpcHost,
             lndCert,
@@ -42,7 +40,6 @@ export class Options {
     }
 
     constructor(
-        readonly port: number,
         readonly lndRestHost?: string,
         readonly lndRpcHost?: string,
         readonly lndCert?: Buffer,
@@ -50,4 +47,8 @@ export class Options {
         readonly lndInvoiceMacaroon?: Buffer,
         readonly lndReadonlyMacaroon?: Buffer,
     ) {}
+}
+
+function getEnv(prefix: string, key: string) {
+    return process.env[prefix + key];
 }

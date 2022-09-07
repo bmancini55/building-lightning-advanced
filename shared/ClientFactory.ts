@@ -10,8 +10,8 @@ export class ClientFactory {
      * Constructs an LND GRPC client from environment variables.
      * @returns
      */
-    public static async lndFromEnv(): Promise<ILndClient> {
-        const options = await Options.fromEnv();
+    public static async lndFromEnv(prefix = ""): Promise<ILndClient> {
+        const options = await Options.fromEnv(prefix);
         return new LndRpcClient(options.lndRpcHost, options.lndAdminMacaroon, options.lndCert);
     }
 }

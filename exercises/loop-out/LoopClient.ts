@@ -6,8 +6,19 @@ import { prompt } from "enquirer";
 import { sha256 } from "../../shared/Sha256";
 import { createHtlcDescriptor } from "./CreateHtlcDescriptor";
 import { BlockMonitor } from "./BlockMonitor";
+import { ClientFactory } from "../../shared/ClientFactory";
 
 async function run() {
+    const lightning = await ClientFactory.lndFromEnv("N2_");
+    const bitcoind = new Bitcoind.BitcoindClient({
+        host: "127.0.0.1",
+        port: 18443,
+        rpcuser: "polaruser",
+        rpcpassword: "polarpass",
+        zmqpubrawblock: "tcp://127.0.0.1:28334",
+        zmqpubrawtx: "tcp://127.0.0.1:29335",
+    });
+
     let result: any = await prompt({
         type: "input",
         name: "privkey",
@@ -47,15 +58,6 @@ async function run() {
         message: "Enter the htlc amount in satoshis",
     });
     const htlcAmount = Bitcoin.Value.fromSats(Number(result.htlcamount));
-
-    const bitcoind = new Bitcoind.BitcoindClient({
-        host: "127.0.0.1",
-        port: 18443,
-        rpcuser: "polaruser",
-        rpcpassword: "polarpass",
-        zmqpubrawblock: "tcp://127.0.0.1:28334",
-        zmqpubrawtx: "tcp://127.0.0.1:29335",
-    });
 
     // Create an address where simulated mining can go
     const mineAddress = await bitcoind.getNewAddress();
@@ -103,6 +105,20 @@ async function run() {
             }
         }
     });
+
+    result = await prompt({
+        type: "input",
+        name: "payment_request",
+        message: "Enter the payment_request the loop service generated",
+    });
+
+    console.log("paying invoice");
+    await lightning.sendPaymentV2(
+        { payment_request: result.payment_request, timeout_seconds: 600 },
+        invoice => {
+            console.log("invoice status is now:" + invoice.status);
+        },
+    );
 }
 
 run().catch(console.error);
