@@ -1,17 +1,14 @@
 import crypto from "crypto";
 import * as Bitcoin from "@node-lightning/bitcoin";
-import * as Bitcoind from "@node-lightning/bitcoind";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
 import { ILndClient } from "../../shared/data/lnd/ILndClient";
 import { Lnd } from "../../shared/data/lnd/v0.12.1-beta/Types";
-import { OutPoint, PrivateKey, Tx } from "@node-lightning/bitcoin";
+import { OutPoint, Tx } from "@node-lightning/bitcoin";
 import { Wallet } from "./Wallet";
 import { prompt } from "enquirer";
 import { createHtlcDescriptor as createHtlcDescriptor } from "./CreateHtlcDescriptor";
 import { BlockMonitor } from "./BlockMonitor";
-
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class LoopService {
     public lightning: ILndClient;
@@ -115,19 +112,8 @@ async function run() {
     const service = new LoopService();
     await service.start();
 
-    // PreReqs:
-    // Hash
-    // Private key of funds of funds
-
-    // Bob creates hash and provides a pubkey where she wants funds
-    // Alice generates an invoice for the hash and we spit this out
-    // Bob pays invoices
-    // Alice upon receipt of payment creates HTLC tx and pays it
-    // Alice watches output to look for payment
-    // Bob pays the transaction
-    // Alice sees the HTLC payment and settles online
-
-    // generate a private key for our wallet
+    // We'll use this address for mining blocks
+    const mineAddress = await service.bitcoind.getNewAddress();
 
     let result: any = await prompt({
         type: "input",
@@ -141,18 +127,6 @@ async function run() {
     const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
     console.log("our private key", ourPrivKey.toHex());
     console.log("our address", ourAddress);
-
-    const monitor = new BlockMonitor(service.bitcoind);
-    const wallet = new Wallet(monitor);
-    wallet.addKey(ourPrivKey);
-
-    console.log("performing sync");
-    await monitor.sync();
-    monitor.watch();
-
-    // add  some funds to the private key
-    console.log(`adding funds to ${ourAddress}`);
-    service.bitcoind.sendToAddress(ourPrivKey.toPubKey(true).toP2wpkhAddress(), 1);
 
     // prompt for their address
     result = await prompt({
@@ -178,6 +152,21 @@ async function run() {
     });
     const satoshis = Bitcoin.Value.fromSats(Number(result.satoshis));
 
+    const monitor = new BlockMonitor(service.bitcoind);
+    const wallet = new Wallet(monitor);
+    wallet.addKey(ourPrivKey);
+
+    console.log("performing sync");
+    await monitor.sync();
+    monitor.watch();
+
+    // add  some funds to the private key
+    console.log(`adding funds to ${ourAddress}`);
+    await service.bitcoind.sendToAddress(ourPrivKey.toPubKey(true).toP2wpkhAddress(), 1);
+
+    // mine a block so we have some funds available
+    await service.bitcoind.generateToAddress(1, mineAddress);
+
     // create an invoice for the amount
     const invoice = await service.generateInvoice(hash, Number(satoshis.sats));
     console.log("they need to pay this invoice", invoice.payment_request);
@@ -197,10 +186,14 @@ async function run() {
     wallet.utxos.add(tx.txId.toString() + ":1");
 
     // Broadcast the transaction
+    console.log("broadcasting on-chain HTLC transaction");
     const htlcTxId = await service.sendTx(tx);
-    console.log("send utxo", htlcTxId);
 
-    // wait for spend of HTLC
+    // Mine block
+    console.log("simulated mining of a block so the transaction will be on chain");
+    await service.bitcoind.generateToAddress(1, mineAddress);
+
+    // Wait for spend of HTLC
     const htlcOutpoint = new Bitcoin.OutPoint(htlcTxId, 1);
     monitor.add(async block => {
         for (const tx of block.tx) {

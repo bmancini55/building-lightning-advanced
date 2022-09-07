@@ -33,7 +33,7 @@ export class Wallet {
         const results = this.scanBlockForReceipt(block, this.scriptPubKeys);
         for (const [tx, vout] of results) {
             const utxo = `${tx.txid}:${vout.n}`;
-            console.log(`received ${utxo}`);
+            console.log(`received UTXO ${utxo}`);
             this.utxos.add(utxo);
         }
 
@@ -41,7 +41,7 @@ export class Wallet {
         const spends = this.scanBlockForSpend(block, this.utxos);
         for (const [tx, vin] of spends) {
             const utxo = `${vin.txid}:${vin.vout}`;
-            console.log(`spent ${utxo}`);
+            console.log(`spent UTXO ${utxo}`);
             this.utxos.delete(utxo);
         }
     }

@@ -8,15 +8,7 @@ import { createHtlcDescriptor } from "./CreateHtlcDescriptor";
 import { BlockMonitor } from "./BlockMonitor";
 
 async function run() {
-    // enter their
     let result: any = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter the service nodes address",
-    });
-    const theirAddress = result.address;
-
-    result = await prompt({
         type: "input",
         name: "privkey",
         message: "Enter a private key or leave blank to generate one",
@@ -29,23 +21,13 @@ async function run() {
     console.log("our private key", ourPrivKey.toHex());
     console.log("our address", ourAddress);
 
-    const bitcoind = new Bitcoind.BitcoindClient({
-        host: "127.0.0.1",
-        port: 18443,
-        rpcuser: "polaruser",
-        rpcpassword: "polarpass",
-        zmqpubrawblock: "tcp://127.0.0.1:28334",
-        zmqpubrawtx: "tcp://127.0.0.1:29335",
+    // enter their
+    result = await prompt({
+        type: "input",
+        name: "address",
+        message: "Enter the service nodes address",
     });
-
-    // perform a chain sync
-    console.log("synchronizing chain");
-    const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(monitor);
-    wallet.addKey(ourPrivKey);
-
-    await monitor.sync();
-    monitor.watch();
+    const theirAddress = result.address;
 
     // construct a preimage and a hash
     result = await prompt({
@@ -66,8 +48,29 @@ async function run() {
     });
     const htlcAmount = Bitcoin.Value.fromSats(Number(result.htlcamount));
 
+    const bitcoind = new Bitcoind.BitcoindClient({
+        host: "127.0.0.1",
+        port: 18443,
+        rpcuser: "polaruser",
+        rpcpassword: "polarpass",
+        zmqpubrawblock: "tcp://127.0.0.1:28334",
+        zmqpubrawtx: "tcp://127.0.0.1:29335",
+    });
+
+    // Create an address where simulated mining can go
+    const mineAddress = await bitcoind.getNewAddress();
+
+    // perform a chain sync
+    console.log("synchronizing chain");
+    const monitor = new BlockMonitor(bitcoind);
+    const wallet = new Wallet(monitor);
+    wallet.addKey(ourPrivKey);
+
+    await monitor.sync();
+    monitor.watch();
+
     // waiting for broadcast htlc transaction
-    console.log("waiting for htlc transaction");
+    console.log("watching for htlc transaction");
     const htlcScripPubKey = Bitcoin.Script.p2wshLock(
         createHtlcDescriptor(
             hash,
@@ -75,10 +78,12 @@ async function run() {
             Bitcoin.Address.decodeBech32(theirAddress).program,
         ),
     );
+
     monitor.add(async (block: Bitcoind.Block) => {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
                 if (vout.scriptPubKey.hex === htlcScripPubKey.serializeCmds().toString("hex")) {
+                    // create the claim transaction
                     const claimTx = createClaimTx(
                         theirAddress,
                         hash,
@@ -87,8 +92,13 @@ async function run() {
                         htlcAmount,
                         `${tx.txid}:${vout.n}`,
                     );
-                    console.log("found transaction, spending");
+
+                    // broadcast the claim transaction
+                    console.log("found transaction, broadcasting claim transaction");
                     await bitcoind.sendRawTransaction(claimTx);
+
+                    // mine a block so everyone can detect it
+                    await bitcoind.generateToAddress(1, mineAddress);
                 }
             }
         }

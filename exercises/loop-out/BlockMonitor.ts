@@ -18,7 +18,6 @@ export class BlockMonitor {
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
-            console.log("block", this.bestBlockHash);
             const block = await this.bitcoind.getBlock(this.bestBlockHash);
 
             for (const handler of this.handlers) {
@@ -40,7 +39,6 @@ export class BlockMonitor {
             if (currentBlock.nextblockhash && currentBlock.nextblockhash !== this.bestBlockHash) {
                 // get the next block
                 const nextBlock = await this.bitcoind.getBlock(currentBlock.nextblockhash);
-                console.log("block", nextBlock.hash);
 
                 // adjust the next hash
                 this.bestBlockHash = nextBlock.hash;
