@@ -1,4 +1,7 @@
+import crypto from "crypto";
+import { StreamReader } from "@node-lightning/bufio";
 import * as Bitcoin from "@node-lightning/bitcoin";
+import { TxOut } from "@node-lightning/bitcoin";
 import * as Bitcoind from "@node-lightning/bitcoind";
 import { BlockMonitor } from "./BlockMonitor";
 
@@ -8,47 +11,101 @@ import { BlockMonitor } from "./BlockMonitor";
 export class Wallet {
     public bestBlockHash: string;
     public keys: Set<Bitcoin.PrivateKey> = new Set();
-    public utxos: Set<string> = new Set();
-    public scriptPubKeys: Set<string> = new Set();
+
+    protected ownedUtxos: Map<string, [Bitcoin.TxOut, Bitcoin.PrivateKey]> = new Map();
+    protected watchedScriptPubKey: Map<string, Bitcoin.PrivateKey> = new Map();
 
     public constructor(readonly blockMonitor: BlockMonitor) {
-        blockMonitor.handlers.add(this.processBlock.bind(this));
+        blockMonitor.connectedHandlers.add(this.processBlock.bind(this));
     }
 
-    public addKey(key: Bitcoin.PrivateKey) {
+    public addKey(
+        key: Bitcoin.PrivateKey = new Bitcoin.PrivateKey(
+            crypto.randomBytes(32),
+            Bitcoin.Network.regtest,
+        ),
+    ) {
         this.keys.add(key);
-        this.addScriptPubKey(Bitcoin.Script.p2wpkhLock(key.toPubKey(true).toBuffer()));
-    }
 
-    public addScriptPubKey(script: Bitcoin.Script) {
-        this.scriptPubKeys.add(script.serializeCmds().toString("hex"));
+        // watch for the p2wpkh spend
+        const scriptPubKey = Bitcoin.Script.p2wpkhLock(key.toPubKey(true).toBuffer());
+        const scriptPubKeyHex = scriptPubKey.serializeCmds().toString("hex");
+        this.watchedScriptPubKey.set(scriptPubKeyHex, key);
+
+        return key;
     }
 
     public getUtxo(): string {
-        return this.utxos.keys().next().value;
+        return this.ownedUtxos.keys().next().value;
+    }
+
+    public fundTx(tx: Bitcoin.TxBuilder) {
+        const utxoId = this.getUtxo();
+        const [utxo, utxoPrvKey] = this.ownedUtxos.get(utxoId);
+        const utxoPubKey = utxoPrvKey.toPubKey(true).toBuffer();
+        console.log("using pubkey", utxoPubKey.toString("hex"));
+        console.log("using utxo value", utxo.value.bitcoin);
+
+        // const changePrvKey = this.addKey();
+        // const changePubKey = changePrvKey.toPubKey(true).toBuffer();
+
+        // create the funding input
+        tx.addInput(utxoId, Bitcoin.Sequence.rbf());
+
+        // calculate the change due
+        const fees = Bitcoin.Value.fromSats(244); // use a fixed fee for simplicity
+        const changeOutput = utxo.value.clone();
+        const spentValue = Bitcoin.Value.zero();
+        for (const output of tx.outputs) {
+            spentValue.add(output.value);
+        }
+        changeOutput.sub(fees);
+        changeOutput.sub(spentValue);
+
+        // construct and add the change output
+        const changeScriptPubKey = Bitcoin.Script.p2wpkhLock(utxoPubKey);
+        tx.addOutput(changeOutput, changeScriptPubKey);
+
+        // add the witness to the input data
+        tx.addWitness(
+            0,
+            tx.signSegWitv0(
+                0,
+                Bitcoin.Script.p2pkhLock(utxoPubKey),
+                utxoPrvKey.toBuffer(),
+                utxo.value,
+            ),
+        );
+        tx.addWitness(0, utxoPubKey);
     }
 
     protected async processBlock(block: Bitcoind.Block) {
-        // scan for receipt
-        const results = this.scanBlockForReceipt(block, this.scriptPubKeys);
+        // scan for receipts
+        const results = this.scanBlockForReceipt(block, this.watchedScriptPubKey);
         for (const [tx, vout] of results) {
-            const utxo = `${tx.txid}:${vout.n}`;
-            console.log(`received UTXO ${utxo}`);
-            this.utxos.add(utxo);
+            const outpoint = new Bitcoin.OutPoint(tx.txid, vout.n);
+            const utxo = new TxOut(
+                Bitcoin.Value.fromBitcoin(vout.value),
+                Bitcoin.Script.parse(StreamReader.fromHex(vout.scriptPubKey.hex)),
+            );
+            const privateKey = this.watchedScriptPubKey.get(vout.scriptPubKey.hex);
+            console.log(`rcvd ${utxo.value.bitcoin.toFixed(8)} - ${outpoint.toString()}`);
+            this.ownedUtxos.set(outpoint.toString(), [utxo, privateKey]);
         }
 
-        // scan for spend
-        const spends = this.scanBlockForSpend(block, this.utxos);
-        for (const [tx, vin] of spends) {
-            const utxo = `${vin.txid}:${vin.vout}`;
-            console.log(`spent UTXO ${utxo}`);
-            this.utxos.delete(utxo);
+        // scan for spends
+        const spends = this.scanBlockForSpend(block, this.ownedUtxos);
+        for (const [, vin] of spends) {
+            const utxoId = `${vin.txid}:${vin.vout}`;
+            const [txOut] = this.ownedUtxos.get(utxoId);
+            console.log(`sent ${txOut.value.bitcoin.toFixed(8)} - ${utxoId}`);
+            this.ownedUtxos.delete(utxoId);
         }
     }
 
     protected *scanBlockForReceipt(
         block: Bitcoind.Block,
-        scriptPubKeys: Set<string>,
+        scriptPubKeys: Map<string, any>,
     ): Generator<[Bitcoind.Transaction, Bitcoind.Output]> {
         for (const tx of block.tx) {
             const vouts = this.scanTxForReceipt(tx, scriptPubKeys);
@@ -60,7 +117,7 @@ export class Wallet {
 
     protected *scanTxForReceipt(
         tx: Bitcoind.Transaction,
-        scriptPubKeys: Set<string>,
+        scriptPubKeys: Map<string, any>,
     ): Generator<Bitcoind.Output> {
         for (const vout of tx.vout) {
             if (scriptPubKeys.has(vout.scriptPubKey.hex)) {
@@ -71,7 +128,7 @@ export class Wallet {
 
     protected *scanBlockForSpend(
         block: Bitcoind.Block,
-        outpoints: Set<string>,
+        outpoints: Map<string, any>,
     ): Generator<[Bitcoind.Transaction, Bitcoind.Input]> {
         for (const tx of block.tx) {
             const vins = this.scanTxForSpend(tx, outpoints);
@@ -83,7 +140,7 @@ export class Wallet {
 
     protected *scanTxForSpend(
         tx: Bitcoind.Transaction,
-        outpoints: Set<string>,
+        outpoints: Map<string, any>,
     ): Generator<Bitcoind.Input> {
         for (const vin of tx.vin) {
             const outpoint = `${vin.txid}:${vin.vout}`;

@@ -1,16 +1,16 @@
 import * as Bitcoind from "@node-lightning/bitcoind";
 import { wait } from "./Wait";
 
-export type AddBlockHandler = (block: Bitcoind.Block) => Promise<void>;
+export type BlockConnectedHandler = (block: Bitcoind.Block) => Promise<void>;
 
 export class BlockMonitor {
     public bestBlockHash: string;
-    public handlers: Set<AddBlockHandler> = new Set();
+    public connectedHandlers: Set<BlockConnectedHandler> = new Set();
 
     constructor(readonly bitcoind: Bitcoind.BitcoindClient) {}
 
-    public add(handler: AddBlockHandler) {
-        this.handlers.add(handler);
+    public addConnectedHandler(handler: BlockConnectedHandler) {
+        this.connectedHandlers.add(handler);
     }
 
     public async sync() {
@@ -20,7 +20,7 @@ export class BlockMonitor {
         while (true) {
             const block = await this.bitcoind.getBlock(this.bestBlockHash);
 
-            for (const handler of this.handlers) {
+            for (const handler of this.connectedHandlers) {
                 await handler(block);
             }
 
@@ -44,8 +44,8 @@ export class BlockMonitor {
                 this.bestBlockHash = nextBlock.hash;
 
                 // fire a handler for attachment
-                for (const handler of this.handlers) {
-                    await handler(nextBlock);
+                for (const connectedHandler of this.connectedHandlers) {
+                    await connectedHandler(nextBlock);
                 }
             } else {
                 await wait(5000);

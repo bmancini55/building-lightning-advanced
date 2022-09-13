@@ -19,7 +19,15 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
+    // enter their
     let result: any = await prompt({
+        type: "input",
+        name: "address",
+        message: "Enter the service nodes address",
+    });
+    const theirAddress = result.address;
+
+    result = await prompt({
         type: "input",
         name: "privkey",
         message: "Enter a private key or leave blank to generate one",
@@ -31,14 +39,6 @@ async function run() {
     const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
     console.log("our private key", ourPrivKey.toHex());
     console.log("our address", ourAddress);
-
-    // enter their
-    result = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter the service nodes address",
-    });
-    const theirAddress = result.address;
 
     // construct a preimage and a hash
     result = await prompt({
@@ -81,7 +81,7 @@ async function run() {
         ),
     );
 
-    monitor.add(async (block: Bitcoind.Block) => {
+    monitor.addConnectedHandler(async (block: Bitcoind.Block) => {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
                 if (vout.scriptPubKey.hex === htlcScripPubKey.serializeCmds().toString("hex")) {

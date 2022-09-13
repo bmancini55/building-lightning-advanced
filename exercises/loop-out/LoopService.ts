@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import util from "util";
 import * as Bitcoin from "@node-lightning/bitcoin";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
@@ -50,7 +51,7 @@ export class LoopService {
         });
     }
 
-    public async createHtlcTx(
+    public async createHtlcTxOriginal(
         hash: Buffer,
         amount: Bitcoin.Value,
         theirAddress: string,
@@ -67,6 +68,14 @@ export class LoopService {
         const txBuilder = new Bitcoin.TxBuilder();
         txBuilder.addInput(utxo, Bitcoin.Sequence.rbf());
 
+        // add the amount output
+        const htlcScriptPubKey = createHtlcDescriptor(
+            hash,
+            theirAddressDecoded.program,
+            ourPubKey.hash160(),
+        );
+        txBuilder.addOutput(amount, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
+
         // add the change output
         const fees = Bitcoin.Value.fromSats(244); // use a fixed fee for simplicity
         const changeOutput = utxoValue.clone();
@@ -75,14 +84,6 @@ export class LoopService {
         const changeScriptPubKey = Bitcoin.Script.p2wpkhLock(ourPubKey.toBuffer());
         txBuilder.addOutput(changeOutput, changeScriptPubKey);
 
-        // add the amount output
-        const htlcScriptPubKey = createHtlcDescriptor(
-            hash,
-            theirAddressDecoded.program,
-            ourPubKey.hash160(),
-        );
-
-        txBuilder.addOutput(amount, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
         txBuilder.locktime = Bitcoin.LockTime.zero();
 
         txBuilder.addWitness(
@@ -97,6 +98,30 @@ export class LoopService {
         txBuilder.addWitness(0, ourPubKey.toBuffer());
 
         return txBuilder.toTx();
+    }
+
+    public async createHtlcTx(
+        hash: Buffer,
+        amount: Bitcoin.Value,
+        theirAddress: string,
+        ourKey: Bitcoin.PrivateKey,
+    ) {
+        const ourPubKey = ourKey.toPubKey(true);
+        const theirAddressDecoded = Bitcoin.Address.decodeBech32(theirAddress);
+
+        const txBuilder = new Bitcoin.TxBuilder();
+        // txBuilder.version = 2; // required to enable
+
+        // add the amount output
+        const htlcScriptPubKey = createHtlcDescriptor(
+            hash,
+            theirAddressDecoded.program,
+            ourPubKey.hash160(),
+        );
+        txBuilder.addOutput(amount, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
+        txBuilder.locktime = Bitcoin.LockTime.zero(); // enable rbf
+
+        return txBuilder;
     }
 
     public async sendTx(tx: Tx): Promise<string> {
@@ -126,6 +151,7 @@ async function run() {
     );
     const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
     console.log("our private key", ourPrivKey.toHex());
+    console.log("our public  key", ourPrivKey.toPubKey(true).toHex());
     console.log("our address", ourAddress);
 
     // prompt for their address
@@ -175,27 +201,35 @@ async function run() {
     await service.waitForInvoicePayment(hash);
     console.log("invoice has been paid");
 
-    // Get a utxo with available funds. This is a simplification but normally we would obtain one
-    // or more UTXOs from the wallet that have enough value.
-    const utxo = OutPoint.fromString(wallet.getUtxo());
+    const tx2 = await service.createHtlcTxOriginal(
+        hash,
+        satoshis,
+        theirAddress,
+        ourPrivKey,
+        OutPoint.fromString(wallet.getUtxo()),
+    );
+
+    console.log("txo", tx2.toHex());
+    console.log("txo", util.inspect(tx2.toJSON(), false, 10, true));
 
     // Create the HTLC transaction
-    const tx = await service.createHtlcTx(hash, satoshis, theirAddress, ourPrivKey, utxo);
+    const tx = await service.createHtlcTx(hash, satoshis, theirAddress, ourPrivKey);
+    wallet.fundTx(tx);
 
-    // Watch the outpoint
-    wallet.utxos.add(tx.txId.toString() + ":1");
+    console.log("txn", tx.toTx().toHex());
+    console.log("txn", util.inspect(tx.toTx().toJSON(), false, 10, true));
 
     // Broadcast the transaction
     console.log("broadcasting on-chain HTLC transaction");
-    const htlcTxId = await service.sendTx(tx);
+    const htlcTxId = await service.sendTx(tx.toTx());
 
     // Mine block
     console.log("simulated mining of a block so the transaction will be on chain");
     await service.bitcoind.generateToAddress(1, mineAddress);
 
     // Wait for spend of HTLC
-    const htlcOutpoint = new Bitcoin.OutPoint(htlcTxId, 1);
-    monitor.add(async block => {
+    const htlcOutpoint = new Bitcoin.OutPoint(htlcTxId, 0);
+    monitor.addConnectedHandler(async block => {
         for (const tx of block.tx) {
             for (const input of tx.vin) {
                 // we have a match!
