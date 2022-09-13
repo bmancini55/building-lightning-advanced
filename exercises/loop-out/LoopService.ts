@@ -51,55 +51,6 @@ export class LoopService {
         });
     }
 
-    public async createHtlcTxOriginal(
-        hash: Buffer,
-        amount: Bitcoin.Value,
-        theirAddress: string,
-        ourKey: Bitcoin.PrivateKey,
-        utxo: Bitcoin.OutPoint,
-    ) {
-        const utxoInfo = await this.bitcoind.getUtxo(utxo.txid.toString(), utxo.outputIndex);
-        const utxoValue = Bitcoin.Value.fromBitcoin(utxoInfo.value);
-
-        const ourPubKey = ourKey.toPubKey(true);
-
-        const theirAddressDecoded = Bitcoin.Address.decodeBech32(theirAddress);
-
-        const txBuilder = new Bitcoin.TxBuilder();
-        txBuilder.addInput(utxo, Bitcoin.Sequence.rbf());
-
-        // add the amount output
-        const htlcScriptPubKey = createHtlcDescriptor(
-            hash,
-            theirAddressDecoded.program,
-            ourPubKey.hash160(),
-        );
-        txBuilder.addOutput(amount, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
-
-        // add the change output
-        const fees = Bitcoin.Value.fromSats(244); // use a fixed fee for simplicity
-        const changeOutput = utxoValue.clone();
-        changeOutput.sub(amount);
-        changeOutput.sub(fees);
-        const changeScriptPubKey = Bitcoin.Script.p2wpkhLock(ourPubKey.toBuffer());
-        txBuilder.addOutput(changeOutput, changeScriptPubKey);
-
-        txBuilder.locktime = Bitcoin.LockTime.zero();
-
-        txBuilder.addWitness(
-            0,
-            txBuilder.signSegWitv0(
-                0,
-                Bitcoin.Script.p2pkhLock(ourPubKey.toBuffer()),
-                ourKey.toBuffer(),
-                utxoValue,
-            ),
-        );
-        txBuilder.addWitness(0, ourPubKey.toBuffer());
-
-        return txBuilder.toTx();
-    }
-
     public async createHtlcTx(
         hash: Buffer,
         amount: Bitcoin.Value,
@@ -182,16 +133,16 @@ async function run() {
     const wallet = new Wallet(monitor);
     wallet.addKey(ourPrivKey);
 
-    console.log("performing sync");
-    await monitor.sync();
-    monitor.watch();
-
     // add  some funds to the private key
     console.log(`adding funds to ${ourAddress}`);
     await service.bitcoind.sendToAddress(ourPrivKey.toPubKey(true).toP2wpkhAddress(), 1);
 
     // mine a block so we have some funds available
     await service.bitcoind.generateToAddress(1, mineAddress);
+
+    console.log("performing sync");
+    await monitor.sync();
+    monitor.watch();
 
     // create an invoice for the amount
     const invoice = await service.generateInvoice(hash, Number(satoshis.sats));
@@ -200,17 +151,6 @@ async function run() {
     // wait for the invoice to be paid
     await service.waitForInvoicePayment(hash);
     console.log("invoice has been paid");
-
-    const tx2 = await service.createHtlcTxOriginal(
-        hash,
-        satoshis,
-        theirAddress,
-        ourPrivKey,
-        OutPoint.fromString(wallet.getUtxo()),
-    );
-
-    console.log("txo", tx2.toHex());
-    console.log("txo", util.inspect(tx2.toJSON(), false, 10, true));
 
     // Create the HTLC transaction
     const tx = await service.createHtlcTx(hash, satoshis, theirAddress, ourPrivKey);
