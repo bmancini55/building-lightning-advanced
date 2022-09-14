@@ -52,23 +52,21 @@ async function run() {
     });
     const satoshis = Bitcoin.Value.fromSats(Number(result.satoshis));
 
-    const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(logger, bitcoind, monitor);
+    const blockMonitor = new BlockMonitor(bitcoind);
+    const wallet = new Wallet(logger, bitcoind, blockMonitor);
 
     const request = new Request(theirAddress, hash, satoshis);
     const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
-    const manager = new RequestManager(logger, lndInvoiceAdapter, wallet);
-
-    monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));
+    const manager = new RequestManager(logger, lndInvoiceAdapter, blockMonitor, wallet);
 
     // add some test funds to our wallet
     await wallet.fundTestWallet();
 
     // sync the wallet
-    await monitor.sync();
-    monitor.watch();
+    await blockMonitor.sync();
+    blockMonitor.watch();
 
-    // finally add the requets
+    // finally add the request
     await manager.addRequest(request);
 }
 

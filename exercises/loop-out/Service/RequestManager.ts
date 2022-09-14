@@ -6,6 +6,7 @@ import { Wallet } from "../Wallet";
 import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
 import { Request } from "./Request";
 import { RequestState } from "./RequestState";
+import { BlockMonitor } from "../BlockMonitor";
 
 export class RequestManager {
     public feeSats: number;
@@ -15,10 +16,12 @@ export class RequestManager {
     constructor(
         readonly logger: ILogger,
         readonly invoiceAdapter: LndInvoiceMonitor,
+        readonly blockMonitor: BlockMonitor,
         readonly wallet: Wallet,
     ) {
         this.feeSats = 1000;
         this.requests = new Map();
+        this.blockMonitor.addConnectedHandler(this.onBlockConnected.bind(this));
     }
 
     /**
