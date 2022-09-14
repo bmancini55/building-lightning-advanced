@@ -1,7 +1,6 @@
 import { ILogger } from "@node-lightning/logger";
 import * as Bitcoin from "@node-lightning/bitcoin";
 import * as Bitcoind from "@node-lightning/bitcoind";
-import { sha256 } from "../../../shared/Sha256";
 import { createHtlcDescriptor } from "../CreateHtlcDescriptor";
 import { Wallet } from "../Wallet";
 import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
@@ -50,11 +49,9 @@ export class LoopOutRequestManager {
         this.logger.info("HTLC accepted", hash);
         const request = this.requests.get(hash);
         if (!request) {
-            this.logger.warn("HTLC accepted but failed to find loop-out request", hash);
+            this.logger.warn(hash, "HTLC accepted but failed to find loop-out request", hash);
             return;
         }
-
-        // validate we aren't expired
 
         // create htlc transaction
         const tx = await this.createHtlcTx(request);

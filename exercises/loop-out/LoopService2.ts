@@ -1,5 +1,3 @@
-import crypto from "crypto";
-import * as Bitcoin from "@node-lightning/bitcoin";
 import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
@@ -56,18 +54,18 @@ async function run() {
     const monitor = new BlockMonitor(bitcoind);
     const wallet = new Wallet(logger, bitcoind, monitor);
 
+    const request = new LoopOutRequest(theirAddress, hash, satoshis);
+    const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
+    const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet);
+
+    monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));
+
     // add some test funds to our wallet
     await wallet.fundTestWallet();
 
     // sync the wallet
     await monitor.sync();
     monitor.watch();
-
-    const request = new LoopOutRequest(theirAddress, hash, satoshis);
-    const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
-    const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet);
-
-    monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));
 
     // finally add the requets
     await manager.addRequest(request);
