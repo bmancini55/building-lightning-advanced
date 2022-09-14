@@ -79,6 +79,10 @@ export class Wallet {
         tx.addWitness(0, utxoPubKey);
     }
 
+    public async sendTx(tx: Bitcoin.Tx) {
+        await this.blockMonitor.bitcoind.sendRawTransaction(tx.toHex());
+    }
+
     protected async processBlock(block: Bitcoind.Block) {
         // scan for receipts
         const results = this.scanBlockForReceipt(block, this.watchedScriptPubKey);
