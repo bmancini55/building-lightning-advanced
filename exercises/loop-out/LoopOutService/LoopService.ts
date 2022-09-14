@@ -1,13 +1,13 @@
 import * as Bitcoin from "@node-lightning/bitcoin";
 import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import { BitcoindClient } from "@node-lightning/bitcoind";
-import { ClientFactory } from "../../shared/ClientFactory";
-import { Wallet } from "./Wallet";
+import { ClientFactory } from "../../../shared/ClientFactory";
+import { Wallet } from "../Wallet";
 import { prompt } from "enquirer";
-import { BlockMonitor } from "./BlockMonitor";
-import { LoopOutRequest } from "./LoopOutService/LoopOutRequest";
-import { LoopOutRequestManager } from "./LoopOutService/LoopOutRequestManager";
-import { LndInvoiceMonitor } from "./LoopOutService/LndInvoiceMonitor";
+import { BlockMonitor } from "../BlockMonitor";
+import { Request } from "./Request";
+import { RequestManager } from "./RequestManager";
+import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
 
 async function run() {
     // Constructs a structure logger for the application
@@ -55,9 +55,9 @@ async function run() {
     const monitor = new BlockMonitor(bitcoind);
     const wallet = new Wallet(logger, bitcoind, monitor);
 
-    const request = new LoopOutRequest(theirAddress, hash, satoshis);
+    const request = new Request(theirAddress, hash, satoshis);
     const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
-    const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet);
+    const manager = new RequestManager(logger, lndInvoiceAdapter, wallet);
 
     monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));
 

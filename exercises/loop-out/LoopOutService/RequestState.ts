@@ -1,4 +1,4 @@
-export enum LoopOutRequestState {
+export enum RequestState {
     Pending,
     AwaitingIncomingHtlcAccepted,
     AwaitingOutgoingHtlcSettlement,

@@ -48,7 +48,7 @@ export class BlockMonitor {
                     await connectedHandler(nextBlock);
                 }
             } else {
-                await wait(5000);
+                await wait(1000);
             }
         }
     }

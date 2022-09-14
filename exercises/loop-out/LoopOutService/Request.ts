@@ -1,8 +1,8 @@
 import * as Bitcoin from "@node-lightning/bitcoin";
-import { LoopOutRequestState } from "./LoopOutRequestState";
+import { RequestState } from "./RequestState";
 
 // should state machine have deps
-export class LoopOutRequest {
+export class Request {
     public paymentRequest: string;
     public feeSats: Bitcoin.Value;
     public finalCltvExpiryDelta: number;
@@ -22,6 +22,6 @@ export class LoopOutRequest {
         readonly theirAddress: string,
         readonly hash: Buffer,
         readonly loopOutSats: Bitcoin.Value,
-        public state = LoopOutRequestState.Pending,
+        public state = RequestState.Pending,
     ) {}
 }

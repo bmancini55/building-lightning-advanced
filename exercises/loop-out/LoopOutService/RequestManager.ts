@@ -4,13 +4,13 @@ import * as Bitcoind from "@node-lightning/bitcoind";
 import { createHtlcDescriptor } from "../CreateHtlcDescriptor";
 import { Wallet } from "../Wallet";
 import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
-import { LoopOutRequest } from "./LoopOutRequest";
-import { LoopOutRequestState } from "./LoopOutRequestState";
+import { Request } from "./Request";
+import { RequestState } from "./RequestState";
 
-export class LoopOutRequestManager {
+export class RequestManager {
     public feeSats: number;
     public bestHeight: number;
-    public requests: Map<string, LoopOutRequest>;
+    public requests: Map<string, Request>;
 
     constructor(
         readonly logger: ILogger,
@@ -26,7 +26,7 @@ export class LoopOutRequestManager {
      * can be provided to the remote party.
      * @param request
      */
-    public async addRequest(request: LoopOutRequest): Promise<void> {
+    public async addRequest(request: Request): Promise<void> {
         this.requests.set(request.hash.toString("hex"), request);
 
         // create the invoice
@@ -42,7 +42,7 @@ export class LoopOutRequestManager {
             this.onHtlcAccepted.bind(this),
             this.onHtlcSettled.bind(this),
         );
-        request.state = LoopOutRequestState.AwaitingIncomingHtlcAccepted;
+        request.state = RequestState.AwaitingIncomingHtlcAccepted;
     }
 
     public async onHtlcAccepted(hash: string): Promise<void> {
@@ -60,7 +60,7 @@ export class LoopOutRequestManager {
         // broadcast the transaction
         await this.wallet.sendTx(tx);
 
-        request.state = LoopOutRequestState.AwaitingOutgoingHtlcSettlement;
+        request.state = RequestState.AwaitingOutgoingHtlcSettlement;
     }
 
     public async onHtlcSettled(hash: string): Promise<void> {
@@ -69,7 +69,7 @@ export class LoopOutRequestManager {
             this.logger.warn("HTLC settled but failed to find loop-out request", hash);
         }
 
-        request.state = LoopOutRequestState.Complete;
+        request.state = RequestState.Complete;
         this.requests.delete(hash);
         this.logger.info(`COMPLETE! hash=${hash}`);
     }
@@ -108,7 +108,7 @@ export class LoopOutRequestManager {
         }
     }
 
-    protected createHtlcTx(request: LoopOutRequest): Bitcoin.Tx {
+    protected createHtlcTx(request: Request): Bitcoin.Tx {
         const ourPubKey = request.ourKey.toPubKey(true);
         const theirAddressDecoded = Bitcoin.Address.decodeBech32(request.theirAddress);
 

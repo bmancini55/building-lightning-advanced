@@ -2,7 +2,7 @@ import * as Bitcoin from "@node-lightning/bitcoin";
 import { ILogger } from "@node-lightning/logger";
 import { ILndClient } from "../../../shared/data/lnd/ILndClient";
 import { Lnd } from "../../../shared/data/lnd/v0.12.1-beta/Types";
-import { LoopOutRequest } from "./LoopOutRequest";
+import { Request } from "./Request";
 
 export type InvoiceChangedHandler = (hash: string) => void;
 
@@ -40,7 +40,7 @@ export class LndInvoiceMonitor {
      * @param request
      * @returns
      */
-    public async generateHoldInvoice(request: LoopOutRequest): Promise<string> {
+    public async generateHoldInvoice(request: Request): Promise<string> {
         const value = Bitcoin.Value.zero();
         value.add(request.loopOutSats);
         value.add(request.feeSats);
