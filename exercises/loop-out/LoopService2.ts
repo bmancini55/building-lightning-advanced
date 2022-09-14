@@ -1,3 +1,4 @@
+import * as Bitcoin from "@node-lightning/bitcoin";
 import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
@@ -41,7 +42,7 @@ async function run() {
         name: "hash",
         message: "Enter the hash from the user",
     });
-    const hash = result.hash;
+    const hash = Buffer.from(result.hash, "hex");
 
     // prompt for the value
     result = await prompt({
@@ -49,7 +50,7 @@ async function run() {
         name: "satoshis",
         message: "Enter the value in satoshis",
     });
-    const satoshis = Number(result.satoshis);
+    const satoshis = Bitcoin.Value.fromSats(Number(result.satoshis));
 
     const monitor = new BlockMonitor(bitcoind);
     const wallet = new Wallet(logger, bitcoind, monitor);

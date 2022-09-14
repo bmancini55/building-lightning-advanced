@@ -27,18 +27,18 @@ export class LoopOutRequestManager {
      * @param request
      */
     public async addRequest(request: LoopOutRequest): Promise<void> {
-        this.requests.set(request.hash, request);
+        this.requests.set(request.hash.toString("hex"), request);
 
         // create the invoice
         request.ourKey = this.wallet.createKey();
-        request.feeSats = 1000;
+        request.feeSats = Bitcoin.Value.fromSats(1000);
         request.finalCltvExpiryDelta = 40;
         request.paymentRequest = await this.invoiceAdapter.generateHoldInvoice(request);
         this.logger.debug("generated payment_request", request.paymentRequest);
 
         // watch for invoice changes
         await this.invoiceAdapter.watch(
-            request.hash,
+            request.hashHex,
             this.onHtlcAccepted.bind(this),
             this.onHtlcSettled.bind(this),
         );
@@ -55,7 +55,7 @@ export class LoopOutRequestManager {
 
         // create htlc transaction
         const tx = await this.createHtlcTx(request);
-        request.htlcTxId = tx.txId.toString();
+        request.htlcOutpoint = new Bitcoin.OutPoint(tx.txId, 0);
 
         // broadcast the transaction
         await this.wallet.sendTx(tx);
@@ -86,13 +86,13 @@ export class LoopOutRequestManager {
     }
 
     protected async checkBlockForSettlements(block: Bitcoind.Block): Promise<void> {
-        const htlcTxIds = new Set(Array.from(this.requests.values()).map(p => p.htlcTxId));
+        const htlcOutPoints = new Set(
+            Array.from(this.requests.values()).map(p => p.htlcOutpoint.toString()),
+        );
         for (const tx of block.tx) {
             for (const input of tx.vin) {
-                if (htlcTxIds.has(input.txid)) {
-                    if (input.vout === 0) {
-                        await this.processHtlcSettlement(input);
-                    }
+                if (htlcOutPoints.has(`${input.txid}:${input.vout}`)) {
+                    await this.processHtlcSettlement(input);
                 }
             }
         }
@@ -116,14 +116,11 @@ export class LoopOutRequestManager {
 
         // add the htlc output
         const htlcScriptPubKey = createHtlcDescriptor(
-            Buffer.from(request.hash, "hex"),
+            request.hash,
             theirAddressDecoded.program,
             ourPubKey.hash160(),
         );
-        txBuilder.addOutput(
-            Bitcoin.Value.fromSats(request.loopOutSats),
-            Bitcoin.Script.p2wshLock(htlcScriptPubKey),
-        );
+        txBuilder.addOutput(request.loopOutSats, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
         txBuilder.locktime = Bitcoin.LockTime.zero();
 
         // fund the transaction from our wallet

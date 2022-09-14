@@ -1,3 +1,4 @@
+import * as Bitcoin from "@node-lightning/bitcoin";
 import { ILogger } from "@node-lightning/logger";
 import { ILndClient } from "../../../shared/data/lnd/ILndClient";
 import { Lnd } from "../../../shared/data/lnd/v0.12.1-beta/Types";
@@ -40,10 +41,14 @@ export class LndInvoiceMonitor {
      * @returns
      */
     public async generateHoldInvoice(request: LoopOutRequest): Promise<string> {
+        const value = Bitcoin.Value.zero();
+        value.add(request.loopOutSats);
+        value.add(request.feeSats);
+
         const result = await this.lnd.addHoldInvoice({
-            hash: Buffer.from(request.hash, "hex"),
+            hash: request.hash,
             cltv_expiry: (40 + request.finalCltvExpiryDelta).toString(),
-            value: (request.loopOutSats + request.feeSats).toString(),
+            value: value.sats.toString(),
         });
         return result.payment_request;
     }
