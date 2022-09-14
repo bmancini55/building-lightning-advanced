@@ -98,6 +98,12 @@ async function run() {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
                 if (vout.scriptPubKey.hex === htlcScripPubKey.serializeCmds().toString("hex")) {
+                    // validate received amount is expected
+                    if (!Bitcoin.Value.fromBitcoin(vout.value).eq(htlcAmount)) {
+                        logger.warn("HTLC payment for amount other than expected, aborting");
+                        return;
+                    }
+
                     // create the claim transaction
                     const claimTx = createClaimTx(
                         theirAddress,

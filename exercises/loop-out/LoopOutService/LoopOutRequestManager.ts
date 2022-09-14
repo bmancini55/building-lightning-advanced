@@ -38,18 +38,19 @@ export class LoopOutRequestManager {
         this.logger.debug("generated payment_request", request.paymentRequest);
 
         // watch for invoice changes
-        await this.invoiceAdapter.watch(request.hash, this.onHtlcAccepted.bind(this));
+        await this.invoiceAdapter.watch(
+            request.hash,
+            this.onHtlcAccepted.bind(this),
+            this.onHtlcSettled.bind(this),
+        );
         request.state = LoopOutRequestState.AwaitingIncomingHtlcAccepted;
     }
 
-    /**
-     * Need some adapter that converts
-     */
     public async onHtlcAccepted(hash: string): Promise<void> {
         this.logger.info("HTLC accepted", hash);
         const request = this.requests.get(hash);
         if (!request) {
-            this.logger.warn("HTLC accept failed but failed to find loop-out request", hash);
+            this.logger.warn("HTLC accepted but failed to find loop-out request", hash);
             return;
         }
 
@@ -63,6 +64,17 @@ export class LoopOutRequestManager {
         await this.wallet.sendTx(tx);
 
         request.state = LoopOutRequestState.AwaitingOutgoingHtlcSettlement;
+    }
+
+    public async onHtlcSettled(hash: string): Promise<void> {
+        const request = this.requests.get(hash);
+        if (!request) {
+            this.logger.warn("HTLC settled but failed to find loop-out request", hash);
+        }
+
+        request.state = LoopOutRequestState.Complete;
+        this.requests.delete(hash);
+        this.logger.info(`COMPLETE! hash=${hash}`);
     }
 
     /**
@@ -96,13 +108,6 @@ export class LoopOutRequestManager {
         // settle invoice
         if (preimage.length) {
             await this.invoiceAdapter.settleInvoice(preimage);
-
-            // hash
-            const hash = sha256(preimage).toString("hex");
-            const request = this.requests.get(hash);
-            request.state = LoopOutRequestState.Complete;
-            this.requests.delete(hash);
-            this.logger.info("loop out request complete!");
         }
     }
 
