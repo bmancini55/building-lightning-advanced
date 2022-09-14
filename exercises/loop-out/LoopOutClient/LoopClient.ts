@@ -2,12 +2,12 @@ import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import crypto from "crypto";
 import * as Bitcoind from "@node-lightning/bitcoind";
 import * as Bitcoin from "@node-lightning/bitcoin";
-import { Wallet } from "./Wallet";
+import { Wallet } from "../Wallet";
 import { prompt } from "enquirer";
-import { sha256 } from "../../shared/Sha256";
-import { createHtlcDescriptor } from "./CreateHtlcDescriptor";
-import { BlockMonitor } from "./BlockMonitor";
-import { ClientFactory } from "../../shared/ClientFactory";
+import { sha256 } from "../../../shared/Sha256";
+import { createHtlcDescriptor } from "../CreateHtlcDescriptor";
+import { BlockMonitor } from "../BlockMonitor";
+import { ClientFactory } from "../../../shared/ClientFactory";
 
 async function run() {
     // Constructs a structure logger for the application
