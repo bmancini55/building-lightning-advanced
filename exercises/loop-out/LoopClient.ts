@@ -63,7 +63,7 @@ async function run() {
     // perform a chain sync
     console.log("synchronizing chain");
     const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(logger, monitor);
+    const wallet = new Wallet(logger, bitcoind, monitor);
     wallet.addKey(ourPrivKey);
 
     await monitor.sync();

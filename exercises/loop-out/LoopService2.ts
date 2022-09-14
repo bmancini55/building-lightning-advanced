@@ -29,25 +29,8 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
-    // We'll use this address for mining blocks
-    const mineAddress = await bitcoind.getNewAddress();
-
-    let result: any = await prompt({
-        type: "input",
-        name: "privkey",
-        message: "Enter a private key or leave blank to generate one",
-    });
-    const ourPrivKey = new Bitcoin.PrivateKey(
-        result.privkey ? Buffer.from(result.privkey, "hex") : crypto.randomBytes(32),
-        Bitcoin.Network.regtest,
-    );
-    const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
-    console.log("our private key", ourPrivKey.toHex());
-    console.log("our public  key", ourPrivKey.toPubKey(true).toHex());
-    console.log("our address", ourAddress);
-
     // prompt for their address
-    result = await prompt({
+    let result: any = await prompt({
         type: "input",
         name: "address",
         message: "Enter their payment address",
@@ -71,25 +54,22 @@ async function run() {
     const satoshis = Number(result.satoshis);
 
     const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(logger, monitor);
-    wallet.addKey(ourPrivKey);
+    const wallet = new Wallet(logger, bitcoind, monitor);
 
-    // add some funds to the private key
-    console.log(`adding funds to ${ourAddress}`);
-    await bitcoind.sendToAddress(ourPrivKey.toPubKey(true).toP2wpkhAddress(), 1);
-    await bitcoind.generateToAddress(1, mineAddress);
+    // add some test funds to our wallet
+    await wallet.fundTestWallet();
 
     // sync the wallet
-    console.log("performing sync");
     await monitor.sync();
     monitor.watch();
 
     const request = new LoopOutRequest(theirAddress, hash, satoshis);
     const lndInvoiceAdapter = new LndInvoiceAdapter(lightning);
-    const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet, ourPrivKey);
+    const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet);
 
     monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));
 
+    // finally add the requets
     await manager.addRequest(request);
 }
 

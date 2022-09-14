@@ -17,7 +17,6 @@ export class LoopOutRequestManager {
         readonly logger: ILogger,
         readonly invoiceAdapter: LndInvoiceAdapter,
         readonly wallet: Wallet,
-        readonly paymentKey: Bitcoin.PrivateKey,
     ) {
         this.feeSats = 1000;
         this.requests = new Map();
@@ -32,7 +31,7 @@ export class LoopOutRequestManager {
         this.requests.set(request.hash, request);
 
         // create the invoice
-        request.ourKey = this.wallet.addKey(this.paymentKey);
+        request.ourKey = this.wallet.createKey();
         request.feeSats = 1000;
         request.finalCltvExpiryDelta = 40;
         request.paymentRequest = await this.invoiceAdapter.generateHoldInvoice(request);

@@ -5,6 +5,7 @@ import * as Bitcoin from "@node-lightning/bitcoin";
 import { TxOut } from "@node-lightning/bitcoin";
 import * as Bitcoind from "@node-lightning/bitcoind";
 import { BlockMonitor } from "./BlockMonitor";
+import { BitcoindClient } from "@node-lightning/bitcoind";
 
 /**
  * This is a very basic wallet that monitors the P2WPKH address for a single key.
@@ -17,7 +18,11 @@ export class Wallet {
     protected ownedUtxos: Map<string, [Bitcoin.TxOut, Bitcoin.PrivateKey]> = new Map();
     protected watchedScriptPubKey: Map<string, Bitcoin.PrivateKey> = new Map();
 
-    public constructor(logger: ILogger, readonly blockMonitor: BlockMonitor) {
+    public constructor(
+        logger: ILogger,
+        readonly bitcoind: BitcoindClient,
+        readonly blockMonitor: BlockMonitor,
+    ) {
         // create a scoped logger for the wallet
         this.logger = logger.sub(Wallet.name);
 
@@ -25,20 +30,50 @@ export class Wallet {
         blockMonitor.connectedHandlers.add(this.processBlock.bind(this));
     }
 
-    public addKey(
-        key: Bitcoin.PrivateKey = new Bitcoin.PrivateKey(
-            crypto.randomBytes(32),
-            Bitcoin.Network.regtest,
-        ),
-    ) {
+    /**
+     * This method
+     */
+    public async fundTestWallet(): Promise<Bitcoin.PrivateKey> {
+        // create an address in bitcoind managed wallet that we'll mine into
+        const mineAddress = await this.bitcoind.getNewAddress();
+
+        // adds a new key to the wallet
+        const key = this.createKey();
+        const address = key.toPubKey(true).toP2wpkhAddress();
+
+        // add some funds to the private key by sending from the
+        // bitcoind wallet to our new address and then mining a block
+        this.logger.info(`adding funds to ${address}`);
+        await this.bitcoind.sendToAddress(address, 1);
+        await this.bitcoind.generateToAddress(1, mineAddress);
+
+        return key;
+    }
+
+    /**
+     * Creates a new PrivateKey and adds it to the wallet.
+     * @param network
+     * @returns
+     */
+    public createKey(network: Bitcoin.Network = Bitcoin.Network.regtest): Bitcoin.PrivateKey {
+        const key = new Bitcoin.PrivateKey(crypto.randomBytes(32), network);
+        this.addKey(key);
+        return key;
+    }
+
+    /**
+     * Adds the key to the wallet. For existing address a scan of the
+     * blockchain for UTXOs must be performed.
+     * @param key
+     */
+    public addKey(key: Bitcoin.PrivateKey) {
+        this.logger.info("adding", key.toPubKey(true).toP2wpkhAddress());
         this.keys.add(key);
 
         // watch for the p2wpkh spend
         const scriptPubKey = Bitcoin.Script.p2wpkhLock(key.toPubKey(true).toBuffer());
         const scriptPubKeyHex = scriptPubKey.serializeCmds().toString("hex");
         this.watchedScriptPubKey.set(scriptPubKeyHex, key);
-
-        return key;
     }
 
     public getUtxo(): string {
@@ -84,7 +119,7 @@ export class Wallet {
     }
 
     public async sendTx(tx: Bitcoin.Tx) {
-        await this.blockMonitor.bitcoind.sendRawTransaction(tx.toHex());
+        await this.bitcoind.sendRawTransaction(tx.toHex());
     }
 
     protected async processBlock(block: Bitcoind.Block) {
