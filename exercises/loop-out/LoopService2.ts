@@ -1,20 +1,21 @@
 import crypto from "crypto";
-import util from "util";
 import * as Bitcoin from "@node-lightning/bitcoin";
+import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../shared/ClientFactory";
-import { ILndClient } from "../../shared/data/lnd/ILndClient";
-import { Lnd } from "../../shared/data/lnd/v0.12.1-beta/Types";
-import { Tx } from "@node-lightning/bitcoin";
 import { Wallet } from "./Wallet";
 import { prompt } from "enquirer";
-import { createHtlcDescriptor as createHtlcDescriptor } from "./CreateHtlcDescriptor";
 import { BlockMonitor } from "./BlockMonitor";
 import { LoopOutRequest } from "./LoopOutService/LoopOutRequest";
 import { LoopOutRequestManager } from "./LoopOutService/LoopOutRequestManager";
 import { LndInvoiceAdapter } from "./LoopOutService/LndInvoiceAdapter";
 
 async function run() {
+    // Constructs a structure logger for the application
+    const logger = new Logger("LoopOutService");
+    logger.transports.push(new ConsoleTransport(console));
+    logger.level = LogLevel.Debug;
+
     // Constructs a LND client from the environment variables
     const lightning = await ClientFactory.lndFromEnv();
 
@@ -70,7 +71,7 @@ async function run() {
     const satoshis = Number(result.satoshis);
 
     const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(monitor);
+    const wallet = new Wallet(logger, monitor);
     wallet.addKey(ourPrivKey);
 
     // add some funds to the private key
@@ -85,7 +86,7 @@ async function run() {
 
     const request = new LoopOutRequest(theirAddress, hash, satoshis);
     const lndInvoiceAdapter = new LndInvoiceAdapter(lightning);
-    const manager = new LoopOutRequestManager(lndInvoiceAdapter, wallet, ourPrivKey);
+    const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet, ourPrivKey);
 
     monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));
 

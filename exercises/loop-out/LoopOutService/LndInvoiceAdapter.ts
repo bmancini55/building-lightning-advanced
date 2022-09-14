@@ -21,7 +21,6 @@ export class LndInvoiceAdapter {
 
         // subscribe to the invoice
         this.lnd.subscribeSingleInvoice({ r_hash: Buffer.from(hash, "hex") }, invoice => {
-            console.log(invoice.r_hash.toString("hex"), invoice.state);
             if (invoice.state === "ACCEPTED") {
                 this._handle(this.acceptedHandlers, invoice);
             } else if (invoice.state === "SETTLED") {
@@ -52,11 +51,8 @@ export class LndInvoiceAdapter {
         const hash = invoice.r_hash.toString("hex");
         const handler = collection.get(hash);
         if (handler) {
-            console.log("calling handler for", hash);
             collection.delete(hash);
             handler(hash);
-        } else {
-            console.log("no handler for", hash);
         }
     }
 }

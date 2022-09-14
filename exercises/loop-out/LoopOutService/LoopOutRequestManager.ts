@@ -1,3 +1,4 @@
+import { ILogger } from "@node-lightning/logger";
 import * as Bitcoin from "@node-lightning/bitcoin";
 import * as Bitcoind from "@node-lightning/bitcoind";
 import { sha256 } from "../../../shared/Sha256";
@@ -13,6 +14,7 @@ export class LoopOutRequestManager {
     public requests: Map<string, LoopOutRequest>;
 
     constructor(
+        readonly logger: ILogger,
         readonly invoiceAdapter: LndInvoiceAdapter,
         readonly wallet: Wallet,
         readonly paymentKey: Bitcoin.PrivateKey,
@@ -34,7 +36,7 @@ export class LoopOutRequestManager {
         request.feeSats = 1000;
         request.finalCltvExpiryDelta = 40;
         request.paymentRequest = await this.invoiceAdapter.generateHoldInvoice(request);
-        console.log("payment_request", request.paymentRequest);
+        this.logger.debug("generated payment_request", request.paymentRequest);
 
         // watch for invoice changes
         await this.invoiceAdapter.watch(request.hash, this.onHtlcAccepted.bind(this));
@@ -45,11 +47,10 @@ export class LoopOutRequestManager {
      * Need some adapter that converts
      */
     public async onHtlcAccepted(hash: string): Promise<void> {
-        console.log("called htlc accepted for hash", hash);
+        this.logger.info("HTLC accepted", hash);
         const request = this.requests.get(hash);
         if (!request) {
-            console.log("failed to find request");
-            console.log(this.requests);
+            this.logger.warn("HTLC accept failed but failed to find loop-out request", hash);
             return;
         }
 
@@ -60,7 +61,6 @@ export class LoopOutRequestManager {
         request.htlcTxId = tx.txId.toString();
 
         // broadcast the transaction
-        console.log("broadcasting tx", request.htlcTxId);
         await this.wallet.sendTx(tx);
 
         request.state = LoopOutRequestState.AwaitingOutgoingHtlcSettlement;
@@ -102,8 +102,8 @@ export class LoopOutRequestManager {
             const hash = sha256(preimage).toString("hex");
             const request = this.requests.get(hash);
             request.state = LoopOutRequestState.Complete;
-            console.log("complete!");
             this.requests.delete(hash);
+            this.logger.info("loop out request complete!");
         }
     }
 

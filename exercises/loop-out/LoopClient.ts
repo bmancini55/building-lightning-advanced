@@ -1,3 +1,4 @@
+import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import crypto from "crypto";
 import * as Bitcoind from "@node-lightning/bitcoind";
 import * as Bitcoin from "@node-lightning/bitcoin";
@@ -9,6 +10,11 @@ import { BlockMonitor } from "./BlockMonitor";
 import { ClientFactory } from "../../shared/ClientFactory";
 
 async function run() {
+    // Constructs a structure logger for the application
+    const logger = new Logger("LoopOutService");
+    logger.transports.push(new ConsoleTransport(console));
+    logger.level = LogLevel.Debug;
+
     const lightning = await ClientFactory.lndFromEnv("N2_");
     const bitcoind = new Bitcoind.BitcoindClient({
         host: "127.0.0.1",
@@ -57,7 +63,7 @@ async function run() {
     // perform a chain sync
     console.log("synchronizing chain");
     const monitor = new BlockMonitor(bitcoind);
-    const wallet = new Wallet(monitor);
+    const wallet = new Wallet(logger, monitor);
     wallet.addKey(ourPrivKey);
 
     await monitor.sync();

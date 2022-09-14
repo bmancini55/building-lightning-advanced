@@ -1,3 +1,4 @@
+import { ILogger } from "@node-lightning/logger";
 import crypto from "crypto";
 import { StreamReader } from "@node-lightning/bufio";
 import * as Bitcoin from "@node-lightning/bitcoin";
@@ -9,13 +10,18 @@ import { BlockMonitor } from "./BlockMonitor";
  * This is a very basic wallet that monitors the P2WPKH address for a single key.
  */
 export class Wallet {
+    public logger: ILogger;
     public bestBlockHash: string;
     public keys: Set<Bitcoin.PrivateKey> = new Set();
 
     protected ownedUtxos: Map<string, [Bitcoin.TxOut, Bitcoin.PrivateKey]> = new Map();
     protected watchedScriptPubKey: Map<string, Bitcoin.PrivateKey> = new Map();
 
-    public constructor(readonly blockMonitor: BlockMonitor) {
+    public constructor(logger: ILogger, readonly blockMonitor: BlockMonitor) {
+        // create a scoped logger for the wallet
+        this.logger = logger.sub(Wallet.name);
+
+        // connect to the block monitor so we can process blocks
         blockMonitor.connectedHandlers.add(this.processBlock.bind(this));
     }
 
@@ -43,8 +49,6 @@ export class Wallet {
         const utxoId = this.getUtxo();
         const [utxo, utxoPrvKey] = this.ownedUtxos.get(utxoId);
         const utxoPubKey = utxoPrvKey.toPubKey(true).toBuffer();
-        console.log("using pubkey", utxoPubKey.toString("hex"));
-        console.log("using utxo value", utxo.value.bitcoin);
 
         // const changePrvKey = this.addKey();
         // const changePubKey = changePrvKey.toPubKey(true).toBuffer();
@@ -93,7 +97,7 @@ export class Wallet {
                 Bitcoin.Script.parse(StreamReader.fromHex(vout.scriptPubKey.hex)),
             );
             const privateKey = this.watchedScriptPubKey.get(vout.scriptPubKey.hex);
-            console.log(`rcvd ${utxo.value.bitcoin.toFixed(8)} - ${outpoint.toString()}`);
+            this.logger.info(`rcvd ${utxo.value.bitcoin.toFixed(8)} - ${outpoint.toString()}`);
             this.ownedUtxos.set(outpoint.toString(), [utxo, privateKey]);
         }
 
@@ -102,7 +106,7 @@ export class Wallet {
         for (const [, vin] of spends) {
             const utxoId = `${vin.txid}:${vin.vout}`;
             const [txOut] = this.ownedUtxos.get(utxoId);
-            console.log(`sent ${txOut.value.bitcoin.toFixed(8)} - ${utxoId}`);
+            this.logger.info(`sent ${txOut.value.bitcoin.toFixed(8)} - ${utxoId}`);
             this.ownedUtxos.delete(utxoId);
         }
     }
