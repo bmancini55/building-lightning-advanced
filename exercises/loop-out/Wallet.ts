@@ -125,9 +125,10 @@ export class Wallet {
         tx.addWitness(0, utxoPubKey);
     }
 
-    public async sendTx(tx: Bitcoin.Tx) {
+    public async sendTx(tx: Bitcoin.Tx, mine = true) {
         this.logger.info("broadcasting txid", tx.txId.toString());
         await this.bitcoind.sendRawTransaction(tx.toHex());
+        if (mine) await this.testWalletMine();
     }
 
     protected async processBlock(block: Bitcoind.Block) {

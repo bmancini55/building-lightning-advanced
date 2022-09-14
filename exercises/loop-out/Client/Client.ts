@@ -81,11 +81,8 @@ async function run() {
                     );
 
                     // broadcast the claim transaction
-                    logger.info("found transaction, broadcasting claim transaction");
-                    await bitcoind.sendRawTransaction(claimTx);
-
-                    // mine a block
-                    await wallet.testWalletMine(1);
+                    logger.info("found on-chain HTLC, broadcasting claim transaction");
+                    await wallet.sendTx(claimTx);
                 }
             }
         }
@@ -109,7 +106,7 @@ function createClaimTx(
     ourPrivKey: Bitcoin.PrivateKey,
     htlcAmount: Bitcoin.Value,
     htlcOutpoint: string,
-) {
+): Bitcoin.Tx {
     const theirAddressDecoded = Bitcoin.Address.decodeBech32(theirAddress);
 
     const htlcScript = createHtlcDescriptor(
@@ -139,5 +136,5 @@ function createClaimTx(
     txBuilder.addWitness(0, preimage);
     txBuilder.addWitness(0, htlcScript.serializeCmds());
 
-    return txBuilder.toHex();
+    return txBuilder.toTx();
 }

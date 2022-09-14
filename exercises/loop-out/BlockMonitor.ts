@@ -1,5 +1,5 @@
 import * as Bitcoind from "@node-lightning/bitcoind";
-import { wait } from "./Wait";
+import { wait } from "../../shared/Wait";
 
 export type BlockConnectedHandler = (block: Bitcoind.Block) => Promise<void>;
 
