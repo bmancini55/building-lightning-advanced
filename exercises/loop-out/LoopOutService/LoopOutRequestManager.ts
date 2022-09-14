@@ -4,7 +4,7 @@ import * as Bitcoind from "@node-lightning/bitcoind";
 import { sha256 } from "../../../shared/Sha256";
 import { createHtlcDescriptor } from "../CreateHtlcDescriptor";
 import { Wallet } from "../Wallet";
-import { LndInvoiceAdapter } from "./LndInvoiceAdapter";
+import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
 import { LoopOutRequest } from "./LoopOutRequest";
 import { LoopOutRequestState } from "./LoopOutRequestState";
 
@@ -15,7 +15,7 @@ export class LoopOutRequestManager {
 
     constructor(
         readonly logger: ILogger,
-        readonly invoiceAdapter: LndInvoiceAdapter,
+        readonly invoiceAdapter: LndInvoiceMonitor,
         readonly wallet: Wallet,
     ) {
         this.feeSats = 1000;

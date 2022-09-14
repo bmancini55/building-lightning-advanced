@@ -1,14 +1,18 @@
+import { ILogger } from "@node-lightning/logger";
 import { ILndClient } from "../../../shared/data/lnd/ILndClient";
 import { Lnd } from "../../../shared/data/lnd/v0.12.1-beta/Types";
 import { LoopOutRequest } from "./LoopOutRequest";
 
 export type InvoiceChangedHandler = (hash: string) => void;
 
-export class LndInvoiceAdapter {
+export class LndInvoiceMonitor {
+    public logger: ILogger;
     public acceptedHandlers: Map<string, InvoiceChangedHandler> = new Map();
     public settledHandlers: Map<string, InvoiceChangedHandler> = new Map();
 
-    constructor(readonly lnd: ILndClient) {}
+    constructor(logger: ILogger, readonly lnd: ILndClient) {
+        this.logger = logger.sub(LndInvoiceMonitor.name);
+    }
 
     public async watch(
         hash: string,
@@ -21,6 +25,7 @@ export class LndInvoiceAdapter {
 
         // subscribe to the invoice
         this.lnd.subscribeSingleInvoice({ r_hash: Buffer.from(hash, "hex") }, invoice => {
+            this.logger.info(`hash=${hash} status=${invoice.state}`);
             if (invoice.state === "ACCEPTED") {
                 this._handle(this.acceptedHandlers, invoice);
             } else if (invoice.state === "SETTLED") {

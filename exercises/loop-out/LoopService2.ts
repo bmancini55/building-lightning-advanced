@@ -8,7 +8,7 @@ import { prompt } from "enquirer";
 import { BlockMonitor } from "./BlockMonitor";
 import { LoopOutRequest } from "./LoopOutService/LoopOutRequest";
 import { LoopOutRequestManager } from "./LoopOutService/LoopOutRequestManager";
-import { LndInvoiceAdapter } from "./LoopOutService/LndInvoiceAdapter";
+import { LndInvoiceMonitor } from "./LoopOutService/LndInvoiceMonitor";
 
 async function run() {
     // Constructs a structure logger for the application
@@ -64,7 +64,7 @@ async function run() {
     monitor.watch();
 
     const request = new LoopOutRequest(theirAddress, hash, satoshis);
-    const lndInvoiceAdapter = new LndInvoiceAdapter(lightning);
+    const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
     const manager = new LoopOutRequestManager(logger, lndInvoiceAdapter, wallet);
 
     monitor.addConnectedHandler(manager.onBlockConnected.bind(manager));

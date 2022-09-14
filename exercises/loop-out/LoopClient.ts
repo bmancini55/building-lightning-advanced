@@ -54,6 +54,7 @@ async function run() {
         type: "input",
         name: "htlcamount",
         message: "Enter the htlc amount in satoshis",
+        initial: 10000,
     });
     const htlcAmount = Bitcoin.Value.fromSats(Number(result.htlcamount));
 
