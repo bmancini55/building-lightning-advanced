@@ -85,8 +85,8 @@ export class Wallet {
         const [utxo, utxoPrvKey] = this.ownedUtxos.get(utxoId);
         const utxoPubKey = utxoPrvKey.toPubKey(true).toBuffer();
 
-        // const changePrvKey = this.addKey();
-        // const changePubKey = changePrvKey.toPubKey(true).toBuffer();
+        const changePrvKey = this.createKey();
+        const changePubKey = changePrvKey.toPubKey(true).toBuffer();
 
         // create the funding input
         tx.addInput(utxoId, Bitcoin.Sequence.rbf());
@@ -102,7 +102,7 @@ export class Wallet {
         changeOutput.sub(spentValue);
 
         // construct and add the change output
-        const changeScriptPubKey = Bitcoin.Script.p2wpkhLock(utxoPubKey);
+        const changeScriptPubKey = Bitcoin.Script.p2wpkhLock(changePubKey);
         tx.addOutput(changeOutput, changeScriptPubKey);
 
         // add the witness to the input data
