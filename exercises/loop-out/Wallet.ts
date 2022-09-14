@@ -119,48 +119,39 @@ export class Wallet {
     }
 
     public async sendTx(tx: Bitcoin.Tx) {
+        this.logger.info("broadcasting txid", tx.txId.toString());
         await this.bitcoind.sendRawTransaction(tx.toHex());
     }
 
     protected async processBlock(block: Bitcoind.Block) {
-        // scan for receipts
-        const results = this.scanBlockForReceipt(block, this.watchedScriptPubKey);
-        for (const [tx, vout] of results) {
-            const outpoint = new Bitcoin.OutPoint(tx.txid, vout.n);
-            const utxo = new TxOut(
-                Bitcoin.Value.fromBitcoin(vout.value),
-                Bitcoin.Script.parse(StreamReader.fromHex(vout.scriptPubKey.hex)),
-            );
-            const privateKey = this.watchedScriptPubKey.get(vout.scriptPubKey.hex);
-            this.logger.info(`rcvd ${utxo.value.bitcoin.toFixed(8)} - ${outpoint.toString()}`);
-            this.ownedUtxos.set(outpoint.toString(), [utxo, privateKey]);
-        }
-
-        // scan for spends
-        const spends = this.scanBlockForSpend(block, this.ownedUtxos);
-        for (const [, vin] of spends) {
-            const utxoId = `${vin.txid}:${vin.vout}`;
-            const [txOut] = this.ownedUtxos.get(utxoId);
-            this.logger.info(`sent ${txOut.value.bitcoin.toFixed(8)} - ${utxoId}`);
-            this.ownedUtxos.delete(utxoId);
-        }
-    }
-
-    protected *scanBlockForReceipt(
-        block: Bitcoind.Block,
-        scriptPubKeys: Map<string, any>,
-    ): Generator<[Bitcoind.Transaction, Bitcoind.Output]> {
         for (const tx of block.tx) {
-            const vouts = this.scanTxForReceipt(tx, scriptPubKeys);
+            // scan for spends
+            const vins = this.scanTxForSpend(tx, this.ownedUtxos);
+            for (const vin of vins) {
+                const utxoId = `${vin.txid}:${vin.vout}`;
+                const [txOut] = this.ownedUtxos.get(utxoId);
+                this.logger.info(`sent ${txOut.value.bitcoin.toFixed(8)} - ${utxoId}`);
+                this.ownedUtxos.delete(utxoId);
+            }
+
+            // scan for receipts
+            const vouts = this.scanTxForReceipt(tx, this.watchedScriptPubKey);
             for (const vout of vouts) {
-                yield [tx, vout];
+                const outpoint = new Bitcoin.OutPoint(tx.txid, vout.n);
+                const utxo = new TxOut(
+                    Bitcoin.Value.fromBitcoin(vout.value),
+                    Bitcoin.Script.parse(StreamReader.fromHex(vout.scriptPubKey.hex)),
+                );
+                const privateKey = this.watchedScriptPubKey.get(vout.scriptPubKey.hex);
+                this.logger.info(`rcvd ${utxo.value.bitcoin.toFixed(8)} - ${outpoint.toString()}`);
+                this.ownedUtxos.set(outpoint.toString(), [utxo, privateKey]);
             }
         }
     }
 
     protected *scanTxForReceipt(
         tx: Bitcoind.Transaction,
-        scriptPubKeys: Map<string, any>,
+        scriptPubKeys: Map<string, unknown>,
     ): Generator<Bitcoind.Output> {
         for (const vout of tx.vout) {
             if (scriptPubKeys.has(vout.scriptPubKey.hex)) {
@@ -169,21 +160,9 @@ export class Wallet {
         }
     }
 
-    protected *scanBlockForSpend(
-        block: Bitcoind.Block,
-        outpoints: Map<string, any>,
-    ): Generator<[Bitcoind.Transaction, Bitcoind.Input]> {
-        for (const tx of block.tx) {
-            const vins = this.scanTxForSpend(tx, outpoints);
-            for (const vin of vins) {
-                yield [tx, vin];
-            }
-        }
-    }
-
     protected *scanTxForSpend(
         tx: Bitcoind.Transaction,
-        outpoints: Map<string, any>,
+        outpoints: Map<string, unknown>,
     ): Generator<Bitcoind.Input> {
         for (const vin of tx.vin) {
             const outpoint = `${vin.txid}:${vin.vout}`;
