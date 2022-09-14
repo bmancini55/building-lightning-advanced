@@ -19,15 +19,7 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
-    // enter their
     let result: any = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter the service nodes address",
-    });
-    const theirAddress = result.address;
-
-    result = await prompt({
         type: "input",
         name: "privkey",
         message: "Enter a private key or leave blank to generate one",
@@ -71,6 +63,20 @@ async function run() {
     await monitor.sync();
     monitor.watch();
 
+    // enter their
+    result = await prompt({
+        type: "input",
+        name: "address",
+        message: "Enter the service nodes address",
+    });
+    const theirAddress = result.address;
+
+    result = await prompt({
+        type: "input",
+        name: "payment_request",
+        message: "Enter the payment_request the loop service generated",
+    });
+
     // waiting for broadcast htlc transaction
     console.log("watching for htlc transaction");
     const htlcScripPubKey = Bitcoin.Script.p2wshLock(
@@ -104,12 +110,6 @@ async function run() {
                 }
             }
         }
-    });
-
-    result = await prompt({
-        type: "input",
-        name: "payment_request",
-        message: "Enter the payment_request the loop service generated",
     });
 
     console.log("paying invoice");
