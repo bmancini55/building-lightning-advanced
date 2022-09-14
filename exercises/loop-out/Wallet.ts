@@ -34,9 +34,6 @@ export class Wallet {
      * This method
      */
     public async fundTestWallet(): Promise<Bitcoin.PrivateKey> {
-        // create an address in bitcoind managed wallet that we'll mine into
-        const mineAddress = await this.bitcoind.getNewAddress();
-
         // adds a new key to the wallet
         const key = this.createKey();
         const address = key.toPubKey(true).toP2wpkhAddress();
@@ -45,9 +42,19 @@ export class Wallet {
         // bitcoind wallet to our new address and then mining a block
         this.logger.info(`adding funds to ${address}`);
         await this.bitcoind.sendToAddress(address, 1);
-        await this.bitcoind.generateToAddress(1, mineAddress);
+
+        // mine the block so there are funds
+        await this.testWalletMine(1);
 
         return key;
+    }
+
+    public async testWalletMine(blocks = 1): Promise<void> {
+        // create an address in bitcoind managed wallet that we'll mine into
+        const mineAddress = await this.bitcoind.getNewAddress();
+
+        // generate block to address
+        await this.bitcoind.generateToAddress(blocks, mineAddress);
     }
 
     /**

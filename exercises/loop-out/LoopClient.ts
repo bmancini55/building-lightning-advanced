@@ -25,53 +25,25 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
-    let result: any = await prompt({
-        type: "input",
-        name: "privkey",
-        message: "Enter a private key or leave blank to generate one",
-    });
-    const ourPrivKey = new Bitcoin.PrivateKey(
-        result.privkey ? Buffer.from(result.privkey, "hex") : crypto.randomBytes(32),
-        Bitcoin.Network.regtest,
-    );
-    const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
-    console.log("our private key", ourPrivKey.toHex());
-    console.log("our address", ourAddress);
-
-    // construct a preimage and a hash
-    result = await prompt({
-        type: "input",
-        name: "preimage",
-        message: "Enter a preimage or enter to create one",
-    });
-    const preimage = result.preimage ? Buffer.from(result.preimage, "hex") : crypto.randomBytes(32);
-    console.log("preimage", preimage.toString("hex"));
-
-    const hash = sha256(preimage);
-    console.log("hash", hash.toString("hex"));
-
-    result = await prompt({
-        type: "input",
-        name: "htlcamount",
-        message: "Enter the htlc amount in satoshis",
-        initial: 10000,
-    });
-    const htlcAmount = Bitcoin.Value.fromSats(Number(result.htlcamount));
-
-    // Create an address where simulated mining can go
-    const mineAddress = await bitcoind.getNewAddress();
-
-    // perform a chain sync
-    console.log("synchronizing chain");
     const monitor = new BlockMonitor(bitcoind);
     const wallet = new Wallet(logger, bitcoind, monitor);
-    wallet.addKey(ourPrivKey);
+    const ourPrivKey = wallet.createKey();
+    const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
+    logger.info("our address", ourAddress);
+
+    const preimage = crypto.randomBytes(32);
+    logger.info("preimage", preimage.toString("hex"));
+
+    const hash = sha256(preimage);
+    logger.info("hash", hash.toString("hex"));
+
+    const htlcAmount = Bitcoin.Value.fromSats(Number(process.argv[2] || 10000));
 
     await monitor.sync();
     monitor.watch();
 
     // enter their
-    result = await prompt({
+    let result: any = await prompt({
         type: "input",
         name: "address",
         message: "Enter the service nodes address",
@@ -85,7 +57,6 @@ async function run() {
     });
 
     // waiting for broadcast htlc transaction
-    console.log("watching for htlc transaction");
     const htlcScripPubKey = Bitcoin.Script.p2wshLock(
         createHtlcDescriptor(
             hash,
@@ -93,17 +64,12 @@ async function run() {
             Bitcoin.Address.decodeBech32(theirAddress).program,
         ),
     );
+    const htlcScriptPubKeyHex = htlcScripPubKey.serializeCmds().toString("hex");
 
     monitor.addConnectedHandler(async (block: Bitcoind.Block) => {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
-                if (vout.scriptPubKey.hex === htlcScripPubKey.serializeCmds().toString("hex")) {
-                    // validate received amount is expected
-                    if (!Bitcoin.Value.fromBitcoin(vout.value).eq(htlcAmount)) {
-                        logger.warn("HTLC payment for amount other than expected, aborting");
-                        return;
-                    }
-
+                if (vout.scriptPubKey.hex === htlcScriptPubKeyHex) {
                     // create the claim transaction
                     const claimTx = createClaimTx(
                         theirAddress,
@@ -115,21 +81,21 @@ async function run() {
                     );
 
                     // broadcast the claim transaction
-                    console.log("found transaction, broadcasting claim transaction");
+                    logger.info("found transaction, broadcasting claim transaction");
                     await bitcoind.sendRawTransaction(claimTx);
 
-                    // mine a block so everyone can detect it
-                    await bitcoind.generateToAddress(1, mineAddress);
+                    // mine a block
+                    await wallet.testWalletMine(1);
                 }
             }
         }
     });
 
-    console.log("paying invoice");
+    logger.info("paying invoice");
     await lightning.sendPaymentV2(
         { payment_request: result.payment_request, timeout_seconds: 600 },
         invoice => {
-            console.log("invoice status is now:" + invoice.status);
+            logger.info("invoice status is now:" + invoice.status);
         },
     );
 }
@@ -151,8 +117,6 @@ function createClaimTx(
         ourPrivKey.toPubKey(true).hash160(),
         theirAddressDecoded.program,
     );
-
-    console.log(htlcScript.sha256().toString("hex"));
 
     // claim funds
     const fees = Bitcoin.Value.fromSats(141);
