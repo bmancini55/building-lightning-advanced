@@ -3,7 +3,6 @@ import crypto from "crypto";
 import * as Bitcoind from "@node-lightning/bitcoind";
 import * as Bitcoin from "@node-lightning/bitcoin";
 import { Wallet } from "../Wallet";
-import { prompt } from "enquirer";
 import { sha256 } from "../../../shared/Sha256";
 import { createHtlcDescriptor } from "../CreateHtlcDescriptor";
 import { BlockMonitor } from "../BlockMonitor";
@@ -17,7 +16,11 @@ async function run() {
     logger.transports.push(new ConsoleTransport(console));
     logger.level = LogLevel.Debug;
 
+    // Construct a LND connection
     const lightning = await ClientFactory.lndFromEnv("N2_");
+
+    // Construct a Bitcoind connection that will be used by our wallet
+    // and our block chain monitor
     const bitcoind = new Bitcoind.BitcoindClient({
         host: "127.0.0.1",
         port: 18443,
@@ -27,68 +30,97 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
+    // Construct a blockchain monitor to be notified when blocks are
+    // added to the blockchain.
     const monitor = new BlockMonitor(bitcoind);
+
+    // Construct a wallet that will manage keys, scan for UTXOs, and
+    // allow us to sign transactions using keys controlled by the wallet.
     const wallet = new Wallet(logger, bitcoind, monitor);
 
-    const ourPrivKey = wallet.createKey();
-    const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
-    logger.info("our address", ourAddress);
+    // Create a key that will be used for claiming the on-chain HTLC.
+    // This address will be used in the hash-spend branch of the HTLC.
+    const htlcClaimPrivKey = wallet.createKey();
+    const htlcClaimPubKey = htlcClaimPrivKey.toPubKey(true);
+    const htlcClaimAddress = htlcClaimPubKey.toP2wpkhAddress();
+    logger.info("generated claim address", htlcClaimAddress);
 
+    // Construct a random preimage
     const preimage = crypto.randomBytes(32);
-    logger.info("preimage", preimage.toString("hex"));
-
     const hash = sha256(preimage);
-    logger.info("hash", hash.toString("hex"));
+    logger.info("generated preimage", preimage.toString("hex"));
+    logger.info("generated hash", hash.toString("hex"));
 
-    const htlcAmount = Bitcoin.Value.fromSats(Number(process.argv[2] || 10000));
+    // Read the value in satoshis that the HTLC should be constructed for
+    const htlcValue = Bitcoin.Value.fromSats(Number(process.argv[2] || 10000));
 
-    await monitor.sync();
+    // Start monitoring the blockchain
     monitor.watch();
 
-    // send the request to the service
+    // Send the request to the service using our nicely generated information
     const apiRequest: Api.LoopOutRequest = {
-        htlcClaimAddress: ourAddress,
+        htlcClaimAddress: htlcClaimAddress,
         hash: hash.toString("hex"),
-        loopOutSats: Number(htlcAmount.sats),
+        loopOutSats: Number(htlcValue.sats),
     };
-    const apiResponse = await Http.post<Api.LoopOutResponse>(
+    logger.debug("API Request", apiRequest);
+    const apiResponse: Api.LoopOutResponse = await Http.post<Api.LoopOutResponse>(
         "http://127.0.0.1:1008/api/loop/out",
         apiRequest,
     );
+    logger.debug("API Response", apiResponse);
 
-    // waiting for broadcast htlc transaction
-    const htlcScripPubKey = Bitcoin.Script.p2wshLock(
-        createHtlcDescriptor(
-            hash,
-            ourPrivKey.toPubKey(true).hash160(),
-            Bitcoin.Address.decodeBech32(apiResponse.htlcRefundAddress).program,
-        ),
+    // Since our HTLC isn't going to change, we can pre-generate its
+    // Script so that we can more efficiently watch for it.
+    const htlcDescriptor = createHtlcDescriptor(
+        hash,
+        htlcClaimPrivKey.toPubKey(true).hash160(),
+        Bitcoin.Address.decodeBech32(apiResponse.htlcRefundAddress).program,
     );
-    const htlcScriptPubKeyHex = htlcScripPubKey.serializeCmds().toString("hex");
+    logger.debug("HTLC Script", htlcDescriptor);
 
+    // Using the Script we pre-generate the ScriptPubKey that we should
+    // expect in a transaction output. Recall that a P2WSH ScriptPubKey
+    // is 0x00 + sha256(script) which will be 33-bytes.
+    const htlcScriptPubKeyHex = Bitcoin.Script.p2wshLock(htlcDescriptor)
+        .serializeCmds()
+        .toString("hex");
+    logger.debug("HTLC ScriptPubKey", htlcScriptPubKeyHex);
+
+    // Before we pay the invoice we want to be sure we are watching
+    // blockchain. We do this by watching scanning all outputs in all
+    // transactions in a block for an output with our expected 33-byte
+    // ScriptPubKey we just computed.
     monitor.addConnectedHandler(async (block: Bitcoind.Block) => {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
                 if (vout.scriptPubKey.hex === htlcScriptPubKeyHex) {
-                    // create the claim transaction
+                    logger.info("found on-chain HTLC, broadcasting claim transaction");
+
+                    // Upon finding the HTLC on-chain, we will now generate
+                    // a claim transaction
                     const claimTx = createClaimTx(
-                        apiResponse.htlcRefundAddress,
+                        htlcDescriptor,
                         hash,
                         preimage,
-                        ourPrivKey,
-                        htlcAmount,
+                        htlcClaimPrivKey,
+                        htlcValue,
                         `${tx.txid}:${vout.n}`,
                     );
+                    logger.debug("Claim Tx", claimTx.toJSON());
+                    logger.debug("Claim Tx Hex", claimTx.toHex());
 
-                    // broadcast the claim transaction
-                    logger.info("found on-chain HTLC, broadcasting claim transaction");
+                    // Finally broadcast the claim transaction to
                     await wallet.sendTx(claimTx);
                 }
             }
         }
     });
 
-    logger.info("paying invoice");
+    // Now that we are all setup, we can pay the invoice. Upon receipt
+    // the Loop Out Service should broadcast the HTLC transaction that
+    // are waiting for.
+    logger.info("Paying invoice");
     await lightning.sendPaymentV2(
         { payment_request: apiResponse.paymentRequest, timeout_seconds: 600 },
         invoice => {
@@ -99,22 +131,23 @@ async function run() {
 
 run().catch(console.error);
 
+/**
+ * Constructs a claim transaction for the HTLC that spends the hash-path
+ * of the HTLC. The witness data used is [<claim_sig>, <preimage>, <htlc_script>]
+ * @param htlcDescriptor the HTLC script
+ * @param preimage used to generate the hash
+ * @param htlcClaimPrivKey private key used to generate the claim signature
+ * @param htlcAmount amount of the htlc
+ * @param htlcOutpoint outpoint of the htlc
+ * @returns
+ */
 function createClaimTx(
-    theirAddress: string,
-    hash: Buffer,
+    htlcDescriptor: Bitcoin.Script,
     preimage: Buffer,
-    ourPrivKey: Bitcoin.PrivateKey,
+    htlcClaimPrivKey: Bitcoin.PrivateKey,
     htlcAmount: Bitcoin.Value,
     htlcOutpoint: string,
 ): Bitcoin.Tx {
-    const theirAddressDecoded = Bitcoin.Address.decodeBech32(theirAddress);
-
-    const htlcScript = createHtlcDescriptor(
-        hash,
-        ourPrivKey.toPubKey(true).hash160(),
-        theirAddressDecoded.program,
-    );
-
     // claim funds
     const fees = Bitcoin.Value.fromSats(141);
     const htlcAmountLessFees = htlcAmount.clone();
@@ -124,17 +157,17 @@ function createClaimTx(
     txBuilder.addInput(htlcOutpoint);
     txBuilder.addOutput(
         htlcAmountLessFees,
-        Bitcoin.Script.p2wpkhLock(ourPrivKey.toPubKey(true).toBuffer()),
+        Bitcoin.Script.p2wpkhLock(htlcClaimPrivKey.toPubKey(true).toBuffer()),
     );
 
     // add witness
     txBuilder.addWitness(
         0,
-        txBuilder.signSegWitv0(0, htlcScript, ourPrivKey.toBuffer(), htlcAmount),
+        txBuilder.signSegWitv0(0, htlcDescriptor, htlcClaimPrivKey.toBuffer(), htlcAmount),
     );
-    txBuilder.addWitness(0, ourPrivKey.toPubKey(true).toBuffer());
+    txBuilder.addWitness(0, htlcClaimPrivKey.toPubKey(true).toBuffer());
     txBuilder.addWitness(0, preimage);
-    txBuilder.addWitness(0, htlcScript.serializeCmds());
+    txBuilder.addWitness(0, htlcDescriptor.serializeCmds());
 
     return txBuilder.toTx();
 }
