@@ -7,11 +7,15 @@ export class Request {
     public feeSats: Bitcoin.Value;
     public finalCltvExpiryDelta: number;
     public htlcOutpoint: Bitcoin.OutPoint;
-    public ourKey: Bitcoin.PrivateKey;
+    public htlcRefundKey: Bitcoin.PrivateKey;
 
-    public get theirPubKeyHash(): Buffer {
-        const result = Bitcoin.Address.decodeBech32(this.theirAddress);
+    public get htlcClaimPubKeyHash(): Buffer {
+        const result = Bitcoin.Address.decodeBech32(this.htlcClaimAddress);
         return result.program;
+    }
+
+    public get htlcRefundAddress(): string {
+        return this.htlcRefundKey.toPubKey(true).toP2wpkhAddress();
     }
 
     public get hashHex(): string {
@@ -19,7 +23,7 @@ export class Request {
     }
 
     constructor(
-        readonly theirAddress: string,
+        readonly htlcClaimAddress: string,
         readonly hash: Buffer,
         readonly loopOutSats: Bitcoin.Value,
         public state = RequestState.Pending,

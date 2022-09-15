@@ -8,6 +8,8 @@ import { sha256 } from "../../../shared/Sha256";
 import { createHtlcDescriptor } from "../CreateHtlcDescriptor";
 import { BlockMonitor } from "../BlockMonitor";
 import { ClientFactory } from "../../../shared/ClientFactory";
+import { Http } from "../../../shared/Http";
+import { Api } from "../ApiTypes";
 
 async function run() {
     // Constructs a structure logger for the application
@@ -27,6 +29,7 @@ async function run() {
 
     const monitor = new BlockMonitor(bitcoind);
     const wallet = new Wallet(logger, bitcoind, monitor);
+
     const ourPrivKey = wallet.createKey();
     const ourAddress = ourPrivKey.toPubKey(true).toP2wpkhAddress();
     logger.info("our address", ourAddress);
@@ -42,26 +45,23 @@ async function run() {
     await monitor.sync();
     monitor.watch();
 
-    // enter their
-    let result: any = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter the service nodes address",
-    });
-    const theirAddress = result.address;
-
-    result = await prompt({
-        type: "input",
-        name: "payment_request",
-        message: "Enter the payment_request the loop service generated",
-    });
+    // send the request to the service
+    const apiRequest: Api.LoopOutRequest = {
+        htlcClaimAddress: ourAddress,
+        hash: hash.toString("hex"),
+        loopOutSats: Number(htlcAmount.sats),
+    };
+    const apiResponse = await Http.post<Api.LoopOutResponse>(
+        "http://127.0.0.1:1008/api/loop/out",
+        apiRequest,
+    );
 
     // waiting for broadcast htlc transaction
     const htlcScripPubKey = Bitcoin.Script.p2wshLock(
         createHtlcDescriptor(
             hash,
             ourPrivKey.toPubKey(true).hash160(),
-            Bitcoin.Address.decodeBech32(theirAddress).program,
+            Bitcoin.Address.decodeBech32(apiResponse.htlcRefundAddress).program,
         ),
     );
     const htlcScriptPubKeyHex = htlcScripPubKey.serializeCmds().toString("hex");
@@ -72,7 +72,7 @@ async function run() {
                 if (vout.scriptPubKey.hex === htlcScriptPubKeyHex) {
                     // create the claim transaction
                     const claimTx = createClaimTx(
-                        theirAddress,
+                        apiResponse.htlcRefundAddress,
                         hash,
                         preimage,
                         ourPrivKey,
@@ -90,7 +90,7 @@ async function run() {
 
     logger.info("paying invoice");
     await lightning.sendPaymentV2(
-        { payment_request: result.payment_request, timeout_seconds: 600 },
+        { payment_request: apiResponse.paymentRequest, timeout_seconds: 600 },
         invoice => {
             logger.info("invoice status is now:" + invoice.status);
         },

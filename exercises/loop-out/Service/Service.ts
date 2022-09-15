@@ -1,13 +1,11 @@
-import * as Bitcoin from "@node-lightning/bitcoin";
 import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 import { ClientFactory } from "../../../shared/ClientFactory";
 import { Wallet } from "../Wallet";
-import { prompt } from "enquirer";
 import { BlockMonitor } from "../BlockMonitor";
-import { Request } from "./Request";
 import { RequestManager } from "./RequestManager";
 import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
+import { api } from "./Api";
 
 async function run() {
     // Constructs a structure logger for the application
@@ -28,34 +26,9 @@ async function run() {
         zmqpubrawtx: "tcp://127.0.0.1:29335",
     });
 
-    // prompt for their address
-    let result: any = await prompt({
-        type: "input",
-        name: "address",
-        message: "Enter their payment address",
-    });
-    const theirAddress = result.address;
-
-    // prompt for the value
-    result = await prompt({
-        type: "input",
-        name: "hash",
-        message: "Enter the hash from the user",
-    });
-    const hash = Buffer.from(result.hash, "hex");
-
-    // prompt for the value
-    result = await prompt({
-        type: "input",
-        name: "satoshis",
-        message: "Enter the value in satoshis",
-    });
-    const satoshis = Bitcoin.Value.fromSats(Number(result.satoshis));
-
     const blockMonitor = new BlockMonitor(bitcoind);
     const wallet = new Wallet(logger, bitcoind, blockMonitor);
 
-    const request = new Request(theirAddress, hash, satoshis);
     const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
     const manager = new RequestManager(logger, lndInvoiceAdapter, blockMonitor, wallet);
 
@@ -66,8 +39,10 @@ async function run() {
     await blockMonitor.sync();
     blockMonitor.watch();
 
-    // finally add the request
-    await manager.addRequest(request);
+    const router = api(manager);
+    router.listen(1008, () => {
+        logger.info("listening on 1008");
+    });
 }
 
 run().catch(console.error);

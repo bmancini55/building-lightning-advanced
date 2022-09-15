@@ -33,7 +33,7 @@ export class RequestManager {
         this.requests.set(request.hash.toString("hex"), request);
 
         // create the invoice
-        request.ourKey = this.wallet.createKey();
+        request.htlcRefundKey = this.wallet.createKey();
         request.feeSats = Bitcoin.Value.fromSats(1000);
         request.finalCltvExpiryDelta = 40;
         request.paymentRequest = await this.invoiceAdapter.generateHoldInvoice(request);
@@ -48,15 +48,12 @@ export class RequestManager {
         request.state = RequestState.AwaitingIncomingHtlcAccepted;
     }
 
-    public async onHtlcAccepted(hash: string): Promise<void> {
-        this.logger.info("HTLC accepted", hash);
+    protected async onHtlcAccepted(hash: string): Promise<void> {
+        this.logger.debug("event: htlc_accepted", hash);
         const request = this.requests.get(hash);
-        if (!request) {
-            this.logger.warn(hash, "HTLC accepted but failed to find loop-out request", hash);
-            return;
-        }
 
         // create htlc transaction
+        this.logger.debug("action: create on-chain htlc");
         const tx = await this.createHtlcTx(request);
         request.htlcOutpoint = new Bitcoin.OutPoint(tx.txId, 0);
 
@@ -66,12 +63,9 @@ export class RequestManager {
         request.state = RequestState.AwaitingOutgoingHtlcSettlement;
     }
 
-    public async onHtlcSettled(hash: string): Promise<void> {
+    protected async onHtlcSettled(hash: string): Promise<void> {
+        this.logger.debug("event: htlc_settled", hash);
         const request = this.requests.get(hash);
-        if (!request) {
-            this.logger.warn("HTLC settled but failed to find loop-out request", hash);
-        }
-
         request.state = RequestState.Complete;
         this.requests.delete(hash);
         this.logger.info(`COMPLETE! hash=${hash}`);
@@ -95,6 +89,7 @@ export class RequestManager {
         for (const tx of block.tx) {
             for (const input of tx.vin) {
                 if (htlcOutPoints.has(`${input.txid}:${input.vout}`)) {
+                    this.logger.debug("event: block_connected[htlc_spend]");
                     await this.processHtlcSettlement(input);
                 }
             }
@@ -107,13 +102,14 @@ export class RequestManager {
 
         // settle invoice
         if (preimage.length) {
+            this.logger.debug("action: settle invoice");
             await this.invoiceAdapter.settleInvoice(preimage);
         }
     }
 
     protected createHtlcTx(request: Request): Bitcoin.Tx {
-        const ourPubKey = request.ourKey.toPubKey(true);
-        const theirAddressDecoded = Bitcoin.Address.decodeBech32(request.theirAddress);
+        const ourPubKey = request.htlcRefundKey.toPubKey(true);
+        const theirAddressDecoded = Bitcoin.Address.decodeBech32(request.htlcClaimAddress);
 
         const txBuilder = new Bitcoin.TxBuilder();
 
