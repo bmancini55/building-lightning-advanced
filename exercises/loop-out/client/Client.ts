@@ -1,3 +1,4 @@
+import util from "util";
 import { Logger, ConsoleTransport, LogLevel } from "@node-lightning/logger";
 import crypto from "crypto";
 import * as Bitcoind from "@node-lightning/bitcoind";
@@ -55,6 +56,7 @@ async function run() {
     const htlcValue = Bitcoin.Value.fromSats(Number(process.argv[2] || 10000));
 
     // Start monitoring the blockchain
+    await monitor.sync();
     monitor.watch();
 
     // Send the request to the service using our nicely generated information
@@ -63,12 +65,12 @@ async function run() {
         hash: hash.toString("hex"),
         loopOutSats: Number(htlcValue.sats),
     };
-    logger.debug("API Request", apiRequest);
+    logger.debug("service request", apiRequest);
     const apiResponse: Api.LoopOutResponse = await Http.post<Api.LoopOutResponse>(
         "http://127.0.0.1:1008/api/loop/out",
         apiRequest,
     );
-    logger.debug("API Response", apiResponse);
+    logger.debug("service response", apiResponse);
 
     // Since our HTLC isn't going to change, we can pre-generate its
     // Script so that we can more efficiently watch for it.
@@ -77,7 +79,7 @@ async function run() {
         htlcClaimPrivKey.toPubKey(true).hash160(),
         Bitcoin.Address.decodeBech32(apiResponse.htlcRefundAddress).program,
     );
-    logger.debug("HTLC Script", htlcDescriptor);
+    logger.debug("constructed HTLC script", htlcDescriptor.toString());
 
     // Using the Script we pre-generate the ScriptPubKey that we should
     // expect in a transaction output. Recall that a P2WSH ScriptPubKey
@@ -85,7 +87,7 @@ async function run() {
     const htlcScriptPubKeyHex = Bitcoin.Script.p2wshLock(htlcDescriptor)
         .serializeCmds()
         .toString("hex");
-    logger.debug("HTLC ScriptPubKey", htlcScriptPubKeyHex);
+    logger.debug("constructed HTLC scriptPubKey", htlcScriptPubKeyHex);
 
     // Before we pay the invoice we want to be sure we are watching
     // blockchain. We do this by watching scanning all outputs in all
@@ -101,16 +103,14 @@ async function run() {
                     // a claim transaction
                     const claimTx = createClaimTx(
                         htlcDescriptor,
-                        hash,
                         preimage,
                         htlcClaimPrivKey,
                         htlcValue,
                         `${tx.txid}:${vout.n}`,
                     );
-                    logger.debug("Claim Tx", claimTx.toJSON());
-                    logger.debug("Claim Tx Hex", claimTx.toHex());
+                    logger.debug("Constructed claim transaction", claimTx.toHex());
 
-                    // Finally broadcast the claim transaction to
+                    // Broadcast the claim transaction
                     await wallet.sendTx(claimTx);
                 }
             }
@@ -120,7 +120,7 @@ async function run() {
     // Now that we are all setup, we can pay the invoice. Upon receipt
     // the Loop Out Service should broadcast the HTLC transaction that
     // are waiting for.
-    logger.info("Paying invoice");
+    logger.info("paying invoice");
     await lightning.sendPaymentV2(
         { payment_request: apiResponse.paymentRequest, timeout_seconds: 600 },
         invoice => {
@@ -148,25 +148,35 @@ function createClaimTx(
     htlcAmount: Bitcoin.Value,
     htlcOutpoint: string,
 ): Bitcoin.Tx {
-    // claim funds
+    const txBuilder = new Bitcoin.TxBuilder();
+
+    // single input that is the HTLC's outpoint
+    txBuilder.addInput(htlcOutpoint);
+
+    // calculate fees at 1-sat/byte
     const fees = Bitcoin.Value.fromSats(141);
     const htlcAmountLessFees = htlcAmount.clone();
     htlcAmountLessFees.sub(fees);
 
-    const txBuilder = new Bitcoin.TxBuilder();
-    txBuilder.addInput(htlcOutpoint);
+    // single output that spends the HTLC to a standard P2WPKH claim address
     txBuilder.addOutput(
         htlcAmountLessFees,
         Bitcoin.Script.p2wpkhLock(htlcClaimPrivKey.toPubKey(true).toBuffer()),
     );
 
-    // add witness
+    // witness 0: signature
     txBuilder.addWitness(
         0,
         txBuilder.signSegWitv0(0, htlcDescriptor, htlcClaimPrivKey.toBuffer(), htlcAmount),
     );
+
+    // witness 1: claim public key
     txBuilder.addWitness(0, htlcClaimPrivKey.toPubKey(true).toBuffer());
+
+    // witness 2: preimage
     txBuilder.addWitness(0, preimage);
+
+    // witness 3: htlc script (required for spend p2wsh input)
     txBuilder.addWitness(0, htlcDescriptor.serializeCmds());
 
     return txBuilder.toTx();

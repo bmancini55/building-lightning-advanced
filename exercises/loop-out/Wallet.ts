@@ -40,7 +40,7 @@ export class Wallet {
 
         // add some funds to the private key by sending from the
         // bitcoind wallet to our new address and then mining a block
-        this.logger.info(`adding funds to ${address}`);
+        this.logger.debug(`adding funds to ${address}`);
         await this.bitcoind.sendToAddress(address, 1);
 
         // mine the block so there are funds
@@ -74,7 +74,7 @@ export class Wallet {
      * @param key
      */
     public addKey(key: Bitcoin.PrivateKey) {
-        this.logger.info("adding", key.toPubKey(true).toP2wpkhAddress());
+        this.logger.debug("adding", key.toPubKey(true).toP2wpkhAddress());
         this.keys.add(key);
 
         // watch for the p2wpkh spend
