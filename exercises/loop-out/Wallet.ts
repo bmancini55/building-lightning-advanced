@@ -118,7 +118,7 @@ export class Wallet {
         const changePubKey = changePrvKey.toPubKey(true).toBuffer();
 
         // create the funding input
-        tx.addInput(utxoId, Bitcoin.Sequence.rbf());
+        tx.addInput(utxoId);
 
         // calculate the change due
         const fees = Bitcoin.Value.fromSats(244); // use a fixed fee for simplicity
