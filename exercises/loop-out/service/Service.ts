@@ -8,7 +8,7 @@ import { LndInvoiceMonitor } from "./LndInvoiceMonitor";
 import { api } from "./Api";
 
 async function run() {
-    // Constructs a structure logger for the application
+    // Constructs a structured logger for the application
     const logger = new Logger("LoopOutService");
     logger.transports.push(new ConsoleTransport(console));
     logger.level = LogLevel.Debug;
@@ -23,19 +23,30 @@ async function run() {
         rpcpassword: process.env.BITCOIND_RPC_PASSWORD,
     });
 
+    // Construct a blockchain monitor to be notified when blocks are
+    // added to the blockchain.
     const blockMonitor = new BlockMonitor(bitcoind);
+
+    // Construct a wallet that will manage keys, scan for UTXOs, and
+    // allow us to sign transactions using keys controlled by the wallet.
     const wallet = new Wallet(logger, bitcoind, blockMonitor);
 
-    const lndInvoiceAdapter = new LndInvoiceMonitor(logger, lightning);
-    const manager = new RequestManager(logger, lndInvoiceAdapter, blockMonitor, wallet);
+    // Construct an invoice monitor
+    const lndInvoiceMonitor = new LndInvoiceMonitor(logger, lightning);
 
-    // add some test funds to our wallet
+    // Construct a request manager that will handle the state changes
+    // for loop-out requests
+    const requestManager = new RequestManager(logger, lndInvoiceMonitor, blockMonitor, wallet);
+
+    // Add some test funds to our wallet so that we can perform on-chain
+    // transactions
     await wallet.fundTestWallet();
 
-    // sync the wallet
+    // Sync the wallet with the blockchain
     await blockMonitor.start();
 
-    const router = api(manager);
+    // Construct and start an API to receive requests
+    const router = api(requestManager);
     router.listen(1008, () => {
         logger.info("listening on 1008");
     });

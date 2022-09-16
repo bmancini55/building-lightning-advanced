@@ -8,7 +8,10 @@ import { BlockMonitor } from "./BlockMonitor";
 import { BitcoindClient } from "@node-lightning/bitcoind";
 
 /**
- * This is a very basic wallet that monitors the P2WPKH address for a single key.
+ * This is a very basic wallet that monitors for P2WPKH addresses that
+ * are controlled by the wallet. It also includes some test wallet
+ * functionality to add funds or mine blocks to assist with testing
+ * on-chain logic.
  */
 export class Wallet {
     public logger: ILogger;
@@ -23,7 +26,6 @@ export class Wallet {
         readonly bitcoind: BitcoindClient,
         readonly blockMonitor: BlockMonitor,
     ) {
-        // create a scoped logger for the wallet
         this.logger = logger.sub(Wallet.name);
 
         // connect to the block monitor so we can process blocks
@@ -31,7 +33,10 @@ export class Wallet {
     }
 
     /**
-     * This method
+     * For use in regtest networks where we can use `minetoaddress` API.
+     * This works by creating an address controlled by the wallet, sending
+     * to it from the bitcoind node, and mining to an address controlled
+     * by the bitcoind node.
      */
     public async fundTestWallet(): Promise<Bitcoin.PrivateKey> {
         // adds a new key to the wallet
@@ -49,6 +54,10 @@ export class Wallet {
         return key;
     }
 
+    /**
+     * Mines a block to an address controlled by the bitcoind node.
+     * @param blocks
+     */
     public async testWalletMine(blocks = 1): Promise<void> {
         // create an address in bitcoind managed wallet that we'll mine into
         const mineAddress = await this.bitcoind.getNewAddress();
@@ -83,10 +92,23 @@ export class Wallet {
         this.watchedScriptPubKey.set(scriptPubKeyHex, key);
     }
 
+    /**
+     * Gets the next available UTXO. As a simplification we assume there
+     * are enough funds. In reality we would implement a proper UTXO
+     * selection algorithm.
+     * @returns
+     */
     public getUtxo(): string {
         return this.ownedUtxos.keys().next().value;
     }
 
+    /**
+     * Funds a partially constructed transaction by finding a UTXO controlled
+     * by the wallet and using it as the input. It also attached a change
+     * output after subtracting a fixed fee rate. A proper wallet would
+     * track proper fee rates and perform proper fee calculations.
+     * @param tx
+     */
     public fundTx(tx: Bitcoin.TxBuilder) {
         const utxoId = this.getUtxo();
         const [utxo, utxoPrvKey] = this.ownedUtxos.get(utxoId);
@@ -125,6 +147,11 @@ export class Wallet {
         tx.addWitness(0, utxoPubKey);
     }
 
+    /**
+     * Broadcasts a transaction
+     * @param tx
+     * @param mine
+     */
     public async sendTx(tx: Bitcoin.Tx, mine = true) {
         this.logger.info("broadcasting txid", tx.txId.toString());
         await this.bitcoind.sendRawTransaction(tx.toHex());

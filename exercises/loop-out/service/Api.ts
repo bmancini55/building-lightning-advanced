@@ -16,7 +16,7 @@ export function api(requestManager: RequestManager) {
         const htlcClaimAddress = body.htlcClaimAddress;
         const hash = Buffer.from(body.hash, "hex");
         const loopOutSats = Bitcoin.Value.fromSats(body.loopOutSats);
-        const request = new Request(htlcClaimAddress, hash, loopOutSats);
+        const request = new Request(requestManager.logger, htlcClaimAddress, hash, loopOutSats);
         await requestManager.addRequest(request);
 
         const response: Api.LoopOutResponse = {

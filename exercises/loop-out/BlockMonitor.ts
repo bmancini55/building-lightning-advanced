@@ -3,6 +3,11 @@ import { wait } from "../../shared/Wait";
 
 export type BlockConnectedHandler = (block: Bitcoind.Block) => Promise<void>;
 
+/**
+ * Abstraction that connects to some block source and alerts handlers
+ * when blocks are connected. This is a simplified implementation, a
+ * proper system would need to account for block reorganizations.
+ */
 export class BlockMonitor {
     protected _watching: boolean;
     public bestBlockHash: string;
@@ -14,15 +19,26 @@ export class BlockMonitor {
         this.connectedHandlers.add(handler);
     }
 
+    /**
+     * Starts the monitor by performing a sync and start watching
+     * for new blocks.
+     */
     public async start() {
         await this.sync();
         this.watch();
     }
 
+    /**
+     * Stop watching for new blocks
+     */
     public async stop() {
         this._watching = false;
     }
 
+    /**
+     * Synchronize the monitor to the current tip of the best blockchain.
+     * The handler will be called for each block.
+     */
     protected async sync() {
         this.bestBlockHash = await this.bitcoind.getBlockHash(1);
 
@@ -42,6 +58,10 @@ export class BlockMonitor {
         }
     }
 
+    /**
+     * Watches for new block connections. The handler will be called each
+     * time a new block is connected.
+     */
     protected async watch() {
         // eslint-disable-next-line no-constant-condition
         this._watching = true;
