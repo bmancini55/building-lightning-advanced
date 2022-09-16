@@ -36,8 +36,7 @@ async function run() {
     await wallet.fundTestWallet();
 
     // sync the wallet
-    await blockMonitor.sync();
-    blockMonitor.watch();
+    await blockMonitor.start();
 
     const router = api(manager);
     router.listen(1008, () => {

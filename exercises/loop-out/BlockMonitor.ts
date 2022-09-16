@@ -4,6 +4,7 @@ import { wait } from "../../shared/Wait";
 export type BlockConnectedHandler = (block: Bitcoind.Block) => Promise<void>;
 
 export class BlockMonitor {
+    protected _watching: boolean;
     public bestBlockHash: string;
     public connectedHandlers: Set<BlockConnectedHandler> = new Set();
 
@@ -13,7 +14,16 @@ export class BlockMonitor {
         this.connectedHandlers.add(handler);
     }
 
-    public async sync() {
+    public async start() {
+        await this.sync();
+        this.watch();
+    }
+
+    public async stop() {
+        this._watching = false;
+    }
+
+    protected async sync() {
         this.bestBlockHash = await this.bitcoind.getBlockHash(1);
 
         // eslint-disable-next-line no-constant-condition
@@ -32,9 +42,10 @@ export class BlockMonitor {
         }
     }
 
-    public async watch() {
+    protected async watch() {
         // eslint-disable-next-line no-constant-condition
-        while (true) {
+        this._watching = true;
+        while (this._watching) {
             const currentBlock = await this.bitcoind.getBlock(this.bestBlockHash);
             if (currentBlock.nextblockhash && currentBlock.nextblockhash !== this.bestBlockHash) {
                 // get the next block

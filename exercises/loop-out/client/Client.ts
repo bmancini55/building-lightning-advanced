@@ -56,8 +56,7 @@ async function run() {
     const htlcValue = Bitcoin.Value.fromSats(Number(process.argv[2] || 10000));
 
     // Start monitoring the blockchain
-    await monitor.sync();
-    monitor.watch();
+    await monitor.start();
 
     // Send the request to the service using our nicely generated information
     const apiRequest: Api.LoopOutRequest = {
