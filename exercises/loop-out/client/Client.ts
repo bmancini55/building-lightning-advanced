@@ -107,6 +107,9 @@ async function run() {
                     // Broadcast the claim transaction
                     logger.debug("broadcasting claim transaction", claimTx.toHex());
                     await wallet.sendTx(claimTx);
+
+                    // Stop listening for blocks
+                    await monitor.stop();
                 }
             }
         }
