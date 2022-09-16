@@ -184,16 +184,17 @@ export class RequestManager {
 
         const txBuilder = new Bitcoin.TxBuilder();
 
-        // add the htlc output
+        // Add the HTLC output as n=0
         const htlcScriptPubKey = createHtlcDescriptor(
             request.hash,
             theirAddressDecoded.program,
             ourPubKey.hash160(),
         );
         txBuilder.addOutput(request.loopOutSats, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
-        txBuilder.locktime = Bitcoin.LockTime.zero();
 
-        // fund the transaction from our wallet
+        // Fund the transaction using our wallet. This method will select
+        // an available UTXO from the wallet, add a change output, and
+        // sign the input to complete the transaction data.
         this.wallet.fundTx(txBuilder);
 
         return txBuilder.toTx();
