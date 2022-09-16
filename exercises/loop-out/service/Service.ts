@@ -14,16 +14,13 @@ async function run() {
     logger.level = LogLevel.Debug;
 
     // Constructs a LND client from the environment variables
-    const lightning = await ClientFactory.lndFromEnv();
+    const lightning = await ClientFactory.lndFromEnv("BOB_");
 
     // Construct bitcoind client
     const bitcoind = new BitcoindClient({
-        host: "127.0.0.1",
-        port: 18443,
-        rpcuser: "polaruser",
-        rpcpassword: "polarpass",
-        zmqpubrawblock: "tcp://127.0.0.1:28334",
-        zmqpubrawtx: "tcp://127.0.0.1:29335",
+        rpcurl: process.env.BITCOIND_RPC_URL,
+        rpcuser: process.env.BITCOIND_RPC_USER,
+        rpcpassword: process.env.BITCOIND_RPC_PASSWORD,
     });
 
     const blockMonitor = new BlockMonitor(bitcoind);

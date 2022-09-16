@@ -18,17 +18,14 @@ async function run() {
     logger.level = LogLevel.Debug;
 
     // Construct a LND connection
-    const lightning = await ClientFactory.lndFromEnv("N2_");
+    const lightning = await ClientFactory.lndFromEnv("ALICE_");
 
     // Construct a Bitcoind connection that will be used by our wallet
     // and our block chain monitor
     const bitcoind = new Bitcoind.BitcoindClient({
-        host: "127.0.0.1",
-        port: 18443,
-        rpcuser: "polaruser",
-        rpcpassword: "polarpass",
-        zmqpubrawblock: "tcp://127.0.0.1:28334",
-        zmqpubrawtx: "tcp://127.0.0.1:29335",
+        rpcurl: process.env.BITCOIND_RPC_URL,
+        rpcuser: process.env.BITCOIND_RPC_USER,
+        rpcpassword: process.env.BITCOIND_RPC_PASSWORD,
     });
 
     // Construct a blockchain monitor to be notified when blocks are
@@ -96,10 +93,9 @@ async function run() {
         for (const tx of block.tx) {
             for (const vout of tx.vout) {
                 if (vout.scriptPubKey.hex === htlcScriptPubKeyHex) {
-                    logger.info("found on-chain HTLC, broadcasting claim transaction");
-
                     // Upon finding the HTLC on-chain, we will now generate
                     // a claim transaction
+                    logger.info("found on-chain HTLC, broadcasting claim transaction");
                     const claimTx = createClaimTx(
                         htlcDescriptor,
                         preimage,
@@ -107,9 +103,9 @@ async function run() {
                         htlcValue,
                         `${tx.txid}:${vout.n}`,
                     );
-                    logger.debug("Constructed claim transaction", claimTx.toHex());
 
                     // Broadcast the claim transaction
+                    logger.debug("broadcasting claim transaction", claimTx.toHex());
                     await wallet.sendTx(claimTx);
                 }
             }
