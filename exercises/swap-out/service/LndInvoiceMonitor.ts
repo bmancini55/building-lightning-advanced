@@ -19,7 +19,7 @@ export class LndInvoiceMonitor {
     }
 
     /**
-     * Constructs a HOLD invoice using the hash created by the loop-out
+     * Constructs a HOLD invoice using the hash created by the swap-out
      * requestor. LND uses a default min_final_cltv_expiry of 40 blocks
      * so we will add an additional expiry period to allow our service
      * to handle the on-chain portion and still have a reasonable timeout
@@ -30,7 +30,7 @@ export class LndInvoiceMonitor {
     public async generateHoldInvoice(request: Request): Promise<string> {
         const DEFAULT_MIN_FINAL_EXPIRY = 40;
         const value = Bitcoin.Value.zero();
-        value.add(request.loopOutSats);
+        value.add(request.swapOutSats);
         value.add(request.feeSats);
 
         const result = await this.lnd.addHoldInvoice({

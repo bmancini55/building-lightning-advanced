@@ -13,7 +13,7 @@ import { Api } from "../ApiTypes";
 
 async function run() {
     // Constructs a structure logger for the application
-    const logger = new Logger("LoopOutService");
+    const logger = new Logger("SwapOutService");
     logger.transports.push(new ConsoleTransport(console));
     logger.level = LogLevel.Debug;
 
@@ -56,14 +56,14 @@ async function run() {
     await monitor.start();
 
     // Send the request to the service using our nicely generated information
-    const apiRequest: Api.LoopOutRequest = {
+    const apiRequest: Api.SwapOutRequest = {
         htlcClaimAddress: htlcClaimAddress,
         hash: hash.toString("hex"),
-        loopOutSats: Number(htlcValue.sats),
+        swapOutSats: Number(htlcValue.sats),
     };
     logger.debug("service request", apiRequest);
-    const apiResponse: Api.LoopOutResponse = await Http.post<Api.LoopOutResponse>(
-        "http://127.0.0.1:1008/api/loop/out",
+    const apiResponse: Api.SwapOutResponse = await Http.post<Api.SwapOutResponse>(
+        "http://127.0.0.1:1008/api/swap/out",
         apiRequest,
     );
     logger.debug("service response", apiResponse);
@@ -116,7 +116,7 @@ async function run() {
     });
 
     // Now that we are all setup, we can pay the invoice. Upon receipt
-    // the Loop Out Service should broadcast the HTLC transaction that
+    // the Swap-Out Service should broadcast the HTLC transaction that
     // are waiting for.
     logger.info("paying invoice");
     await lightning.sendPaymentV2(

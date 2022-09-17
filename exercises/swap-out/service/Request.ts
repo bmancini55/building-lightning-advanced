@@ -2,7 +2,9 @@ import { ILogger } from "@node-lightning/logger";
 import * as Bitcoin from "@node-lightning/bitcoin";
 import { RequestState } from "./RequestState";
 
-// should state machine have deps
+/**
+ * Request for a swap out
+ */
 export class Request {
     protected _state: RequestState;
     public logger: ILogger;
@@ -38,7 +40,7 @@ export class Request {
         logger: ILogger,
         readonly htlcClaimAddress: string,
         readonly hash: Buffer,
-        readonly loopOutSats: Bitcoin.Value,
+        readonly swapOutSats: Bitcoin.Value,
     ) {
         this.logger = logger.sub(Request.name, this.hash.toString("hex").substring(16));
         this.state = RequestState.Pending;

@@ -34,7 +34,7 @@ export class RequestManager {
     }
 
     /**
-     * Starts the process for a Loop-Out by generating an invoice that
+     * Starts the process for a swap-out by generating an invoice that
      * can be provided to the remote party.
      * @param request
      */
@@ -47,7 +47,7 @@ export class RequestManager {
         request.htlcRefundKey = this.wallet.createKey();
 
         // We'll collect 1000 satoshis for the benefits of using the
-        // loop-out service. This fee will be reflected in the difference
+        // swap-out service. This fee will be reflected in the difference
         // between the invoice and the amount we include in the on-chain
         // HTLC.
         request.feeSats = Bitcoin.Value.fromSats(1000);
@@ -149,7 +149,7 @@ export class RequestManager {
     }
 
     /**
-     * When we find an HTLC that was claimed by the loop-out requestor
+     * When we find an HTLC that was claimed by the swap-out requestor
      * we need to extract the preimage from the transaction to settle
      * our incoming off-chain LN HTLC!
      * @param input
@@ -190,7 +190,7 @@ export class RequestManager {
             theirAddressDecoded.program,
             ourPubKey.hash160(),
         );
-        txBuilder.addOutput(request.loopOutSats, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
+        txBuilder.addOutput(request.swapOutSats, Bitcoin.Script.p2wshLock(htlcScriptPubKey));
 
         // Fund the transaction using our wallet. This method will select
         // an available UTXO from the wallet, add a change output, and

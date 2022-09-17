@@ -8,18 +8,18 @@ import { RequestManager } from "./RequestManager";
 export function api(requestManager: RequestManager) {
     const router = express();
     router.use(bodyParser.json({}));
-    router.post("/api/loop/out", (req, res, next) => loopOut(req, res).catch(next));
+    router.post("/api/swap/out", (req, res, next) => swapOut(req, res).catch(next));
     return router;
 
-    async function loopOut(req: express.Request, res: express.Response) {
+    async function swapOut(req: express.Request, res: express.Response) {
         const body = req.body;
         const htlcClaimAddress = body.htlcClaimAddress;
         const hash = Buffer.from(body.hash, "hex");
-        const loopOutSats = Bitcoin.Value.fromSats(body.loopOutSats);
-        const request = new Request(requestManager.logger, htlcClaimAddress, hash, loopOutSats);
+        const swapOutSats = Bitcoin.Value.fromSats(body.swapOutSats);
+        const request = new Request(requestManager.logger, htlcClaimAddress, hash, swapOutSats);
         await requestManager.addRequest(request);
 
-        const response: Api.LoopOutResponse = {
+        const response: Api.SwapOutResponse = {
             htlcRefundAddress: request.htlcRefundAddress,
             paymentRequest: request.paymentRequest,
         };

@@ -1,12 +1,12 @@
 // eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace Api {
-    export type LoopOutRequest = {
+    export type SwapOutRequest = {
         htlcClaimAddress: string;
         hash: string;
-        loopOutSats: number;
+        swapOutSats: number;
     };
 
-    export type LoopOutResponse = {
+    export type SwapOutResponse = {
         htlcRefundAddress: string;
         paymentRequest: string;
     };

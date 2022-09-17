@@ -9,7 +9,7 @@ import { api } from "./Api";
 
 async function run() {
     // Constructs a structured logger for the application
-    const logger = new Logger("LoopOutService");
+    const logger = new Logger("SwapOutService");
     logger.transports.push(new ConsoleTransport(console));
     logger.level = LogLevel.Debug;
 
@@ -35,7 +35,7 @@ async function run() {
     const lndInvoiceMonitor = new LndInvoiceMonitor(logger, lightning);
 
     // Construct a request manager that will handle the state changes
-    // for loop-out requests
+    // for swap-out requests
     const requestManager = new RequestManager(logger, lndInvoiceMonitor, blockMonitor, wallet);
 
     // Add some test funds to our wallet so that we can perform on-chain
